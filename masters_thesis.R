@@ -2,6 +2,8 @@
 library(googlesheets4)
 library(emmeans)
 library(tidyverse)
+library(agricolae)
+library(ggh4x)
 
 # Clean the environment
 rm(list = ls())
@@ -16,10 +18,11 @@ kelp_data_6 <- read_sheet("https://docs.google.com/spreadsheets/d/1FHVlBrssyievd
                           sheet = "hyperborea")
 kelp_data_7 <- read_sheet("https://docs.google.com/spreadsheets/d/1FHVlBrssyievdxxegrkq6g7MS1HEL3AAirMl7akIjMo", 
                           sheet = "juvenile_hyperborea")
-# Set species color
-species_colours <- c("L. digitata" = "darkgreen",
-                     "S. latissima" = "lightgreen",
-                     "L. hyperborea" = "#33C33C")
+
+# Set species, location, and pigment color
+species_colours <- c("L. digitata" = "seagreen3",
+                     "S. latissima" = "skyblue1",
+                     "L. hyperborea" = "orangered2")
 
 # Function to apply all transformations to each dataset
 # Add column treatment and experiment, and then factorize those and species
@@ -39,7 +42,9 @@ process_data <- function(df, experiment_name) {
                                     "20PSU & 17°C", "20PSU & 20°C",
                                     "30PSU & 10°C", "30PSU & 20°C")),
       species = factor(species, 
-                       levels = c("L. digitata", "S. latissima", "L. hyperborea"))
+                       levels = c("L. digitata", "S. latissima", "L. hyperborea")),
+      location = factor(location,
+                        levels = c("Ängklåvbukten", "Lökholmen", "Klövskär", "Klåvningarna"))
     )
   
   return(df)
@@ -51,6 +56,7 @@ kelp_data_5 <- process_data(kelp_data_5, "Experiment 5")
 kelp_data_6 <- process_data(kelp_data_6, "Experiment 6")
 kelp_data_7 <- process_data(kelp_data_7, "Experiment 7")
 
+# Mortality:
 # Bind the data into one dataframe and filter for treatment, experiment and mortality
 kelp_data_mortality <- bind_rows(kelp_data_4, kelp_data_5, kelp_data_6, kelp_data_7) %>%
   select(Mortality, experiment, treatment, species)
@@ -66,7 +72,7 @@ mortality_counts <- kelp_data_mortality %>%
   group_by(experiment, treatment, species) %>%
   summarise(count = n(), .groups = "drop")
 
-# Plot with experiments as bottom axis and treatments above
+# Plot
 mortality <- ggplot(mortality_counts, aes(x = treatment, y = count, fill = species)) +
   geom_bar(stat = "identity", position = "dodge", width = 0.8) +
   scale_fill_manual(values = species_colours) +
@@ -77,20 +83,20 @@ mortality <- ggplot(mortality_counts, aes(x = treatment, y = count, fill = speci
        y = "Count",
        fill = "Species") +
   theme_bw() +
-  theme(strip.placement = "outside",  
+  theme(strip.placement = "outside",
+        legend.position = "top",
         strip.text.x = element_text(size = 12),
         axis.text.x = element_text(angle = 45, hjust = 1))
 
 # Display the plot
 print(mortality)
 
-## Maybe adjust the requirement for mortality,
-## But so far it looks nice!
+## Maybe adjust the requirement for mortality, depending on own requirements
+## It's a matter of own definitions also!
+## But it looks nice!
 
 # Data processing and set up for statistical analysis
 # Calculate SGR_total and replace NAs with mean SGR_total of treatment and species
-## This kind of replaces mortalities also
-### But it's to not have any NA values while still keeping the same variance 
 mean_sgr <- function(df, experiment_id) {
   # Ensuring all weight columns exist in the dataset, adding NA if missing
   weight_cols <- paste0("weight", 1:5, "_g")
@@ -118,7 +124,7 @@ mean_sgr <- function(df, experiment_id) {
   return(df)
 }
 
-# Now the same with weights
+# Now the same with weights 
 ## This needs to be done after so the SGR_total isn't calculated based on this
 mean_weight <- function(df) {
   df <- df %>%
@@ -193,9 +199,10 @@ kelp_data_4 <- kelp_data_4 %>%
   mean_weight() %>%
   mean_dw() %>%
   mean_pigments()
-  
+
 ## Also there's this one sample (S1T1-5) that is deviating a lot in pigment values
-### Mainly really high chlorophyll values even though it was dissolving??
+### Mainly really high chlorophyll values even though it was dissolving
+## So this is only for my data set
 ### Let's replace that one with mean pigment values
 kelp_data_4 <- kelp_data_4 %>%
   mutate(
@@ -226,18 +233,18 @@ kelp_data_7 <- kelp_data_7 %>%
   mean_dw() %>%
   mean_pigments()
 
-# Make sure 30 PSU is included as a factor and is represented
-# Since there's no 30 PSU in the other experiments it could be automatically
-# And also good to do the same with the locations!
+# Factorize all numeric factors used in the experiments
 kelp_data_4$salinity <- factor(kelp_data_4$salinity, levels = c(10, 20, 30))
 kelp_data_4$locationnumber <- factor(kelp_data_4$locationnumber, levels = c(1, 2, 3))
-# And now we need to factorize the other as well :)
+kelp_data_4$temperature <- factor(kelp_data_4$temperature, levels = c(10, 20))
 kelp_data_5$salinity <- factor(kelp_data_5$salinity, levels = c(10, 20))
+kelp_data_5$temperature <- factor(kelp_data_5$temperature, levels = c(10, 20))
 kelp_data_5$locationnumber <- factor(kelp_data_5$locationnumber, levels = c(1, 2))
-# For experiment 6 and 7 we only had 1 location! But we still need to factorize it!
 kelp_data_6$salinity <- factor(kelp_data_6$salinity, levels = c(10, 20))
+kelp_data_6$temperature <- factor(kelp_data_6$temperature, levels = c(10, 20))
 kelp_data_6$locationnumber <- factor(kelp_data_6$locationnumber, levels = c(4))
 kelp_data_7$salinity <- factor(kelp_data_7$salinity, levels = c(10, 20))
+kelp_data_7$temperature <- factor(kelp_data_7$temperature, levels = c(10, 17))
 kelp_data_7$locationnumber <- factor(kelp_data_7$locationnumber, levels = c(4))
 
 # Combine all datasets into one
@@ -247,510 +254,350 @@ kelp_data_combined <- bind_rows(kelp_data_4, kelp_data_5, kelp_data_6, kelp_data
 ## Same one here :)
 kelp_data_combined$treatment <- relevel(kelp_data_combined$treatment, ref = "10PSU & 10°C")  
 kelp_data_combined$species <- relevel(kelp_data_combined$species, ref = "L. digitata")
+kelp_data_combined$location <- relevel(kelp_data_combined$location, ref = "Ängklåvbukten")
 
 ## Let's figure out what the plots should look like based on our factors 
 ### And which are significant - cause no need to include things that don't matter anyway
-# Statistical analysis: three-factor, four-factor, and two factor ANOVAs
+# Statistical analysis: two-, three-, and four-factor ANOVAs
+## Starting with Specific growth rate
 
 # Experiment 4
 sgr_data_4 <- kelp_data_combined %>% filter(experiment == "Experiment 4")
-sgr_model_4 <- aov(SGR_total ~ temperature * salinity * locationnumber, data = sgr_data_4)
+sgr_model_4 <- aov(SGR_total ~ salinity * temperature * locationnumber, data = sgr_data_4)
 
 summary(sgr_model_4)
 
-## So here the interaction between temperature and salinity is very significant!
-### SGR_total is heavily affected by the treatment they get!!
-## So since there's a significance of the interaction - let's do a post-hoc to check where
+# Perform SNK tests using existing ANOVA models, only use the significant factors!!
+## These letters will then be added to the plots to differentiate the groups
+# And since the interaction is significant, we need to create an interaction term
+sgr_data_4 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 4") %>%
+  mutate(sal_temp = interaction(salinity, temperature))
 
-emmeans(sgr_model_4, pairwise ~ salinity * temperature)
+sgr_model_4 <- aov(SGR_total ~ sal_temp, data = sgr_data_4)
 
-## The strongest differences are between the treatments that differ in both temperature and salinity
-### But there's also a negative effect of higher salinity in combination with high temperature
-### So they do worse in high salinity when the temperature is high
-## Like they do worse in 30PSU & 20°C than in 20PSU & 20°C
-### They deteriorate quicker in higher salinity when the temperature is high
+sgr_snk_4 <- SNK.test(sgr_model_4, "sal_temp")
+sgr_snk_4$groups
 
-# Experiment 5
-sgr_data_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5")
-sgr_model_5 <- aov(SGR_total ~ temperature * salinity * species * locationnumber, data = sgr_data_5)
+## For experiment 5 we do separate ANOVAs for the two species
 
-summary(sgr_model_5)
+# Experiment 5 - L. digitata
+sgr_dig_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "L. digitata")
+sgr_dig_5 <- aov(SGR_total ~ salinity * temperature * locationnumber, data = sgr_dig_5)
 
-## Firstly, the interaction between temperature and species is significant
-### So species react differently strongly to temperature
-## Then the temperature:salinity is significant
-### So there's an effect of both salinity and temperature together
-## Let's do post-hoc tests to check the interactions
+summary(sgr_dig_5)
 
-emmeans(sgr_model_5, pairwise ~ salinity * temperature)
+# Experiment 5 - S. latissima
+sgr_sac_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "S. latissima")
+sgr_sac_5 <- aov(SGR_total ~ salinity * temperature * locationnumber, data = sgr_sac_5)
 
-## Except for 10PSU & 10°C compared to 20PSU & 10°C, all the treatments seem to differ greatly
-## A lot of significance - the smallest being between 10PSU & 10°C compared to 10PSU & 20°C
-### Although the difference between 10PSU & 10°C and 10PSU & 20°C isn't too significant
+summary(sgr_sac_5)
 
-## Temperature and species
-emmeans(sgr_model_5, pairwise ~ temperature * species)
+# Perform SNK tests
+# L. digitata
+sgr_dig_5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "L. digitata") %>%
+  mutate(sal_temp = interaction(salinity, temperature))
 
-## The species reactions differ greatly, except for when both of them are treated to 20°C
-### Which both have a very negative reaction to!
+sgr_snk_dig_5 <- aov(SGR_total ~ sal_temp, data = sgr_dig_5)
+sgr_snk_dig_5 <- SNK.test(sgr_snk_dig_5, "sal_temp")
+sgr_snk_dig_5$groups
+
+# S. latissima
+sgr_sac_5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "S. latissima") %>%
+  mutate(sal_temp = interaction(salinity, temperature))
+
+sgr_snk_sac_5 <- aov(SGR_total ~ sal_temp, data = sgr_sac_5)
+sgr_snk_sac_5 <- SNK.test(sgr_snk_sac_5, "sal_temp")
+sgr_snk_sac_5$groups
 
 # Experiment 6
 sgr_data_6 <- kelp_data_combined %>% filter(experiment == "Experiment 6")
-sgr_model_6 <- aov(SGR_total ~ temperature * salinity, data = sgr_data_6)
+sgr_model_6 <- aov(SGR_total ~ salinity * temperature, data = sgr_data_6)
 
 summary(sgr_model_6)
 
-## So here the interaction between temperature and salinity is also significant
-## Let's do post-hoc!
+# Perform SNK test
+sgr_data_6 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 6") %>%
+  mutate(sal_temp = interaction(salinity, temperature))
 
-emmeans(sgr_model_6, pairwise ~ salinity * temperature)
-
-## A lot of significance
-## One interesting thing is 10PSU & 10°C seems to be doing better than the control?
-### But that's not really significant - but close to, so if you increased the sample size it might be?
-
-## Let's check Experiment 7, cause there we used juveniles instead!
+sgr_model_6_int <- aov(SGR_total ~ sal_temp, data = sgr_data_6)
+sgr_snk_6 <- SNK.test(sgr_model_6_int, "sal_temp")
+sgr_snk_6$groups
 
 # Experiment 7
 sgr_data_7 <- kelp_data_combined %>% filter(experiment == "Experiment 7")
-sgr_model_7 <- aov(SGR_total ~ temperature * salinity, data = sgr_data_7)
+sgr_model_7 <- aov(SGR_total ~ salinity * temperature, data = sgr_data_7)
 
 summary(sgr_model_7)
 
-## So this is different
-## Here the interaction is not significant anymore!!
-### Only temperature and salinity as main effects are significant
-## And salinity isn't as strong as temperature 
-## It would be cool to see if adults and juveniles are different
-## I can't really analyse this with an ANOVA though, since both the temperatures and lifestages are different
-### But it could say something about the usage of disks - maybe isn't the best when looking at salinities
-## But either way, when it comes to SGR - temperature and salinity is always a significant factor!!
-### Meaning they heavily affected the SGR in my experiments
+# Perform SNK test
+sgr_snk_7 <- SNK.test(sgr_model_7, c("salinity", "temperature"))
+sgr_snk_7$groups
 
-emmeans(sgr_model_7, pairwise ~ salinity * temperature)
-
-## The interaction isn't significant but there is a huge significant between 20PSU & 10°C compared to 10PSU & 17°C
-### And also a significant difference between 20PSU & 10°C compared to 20PSU & 17°C
-
-## Dry to wet weight ratio - statistical analyses!!
+## Dry to wet weight ratio
 
 # Experiment 4
 dw_data_4 <- kelp_data_combined %>% filter(experiment == "Experiment 4")
-dw_model_4 <- aov(DW_ratio ~ temperature * salinity * locationnumber, data = dw_data_4)
+dw_model_4 <- aov(DW_ratio ~ salinity * temperature * locationnumber, data = dw_data_4)
 
 summary(dw_model_4)
 
-## Nothing is significant?
-### Which is weird - I don't know what to think about that
-## Let's do the others as well
+# No significance so no need to do SNK test here!
 
-# Experiment 5
-dw_data_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5")
-dw_model_5 <- aov(DW_ratio ~ temperature * salinity * locationnumber * species, data = dw_data_5)
+# Experiment 5 - L. digitata
+dw_dig_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "L. digitata")
+dw_dig_5 <- aov(DW_ratio ~ salinity * temperature * locationnumber, data = dw_dig_5)
 
-summary(dw_model_5)
+summary(dw_dig_5)
 
-## Hmm, here temperature, species and the interaction between salinity:location is significant
-## Interesting...
-### So the interaction could mean that there's a difference response to salinity between the two locations
-### And then the main factors could be that in the higher temperature they accumulate more water - cause they do worse?
-## And S. latissima probably accumulates more water than L. digitata
-## But the interaction is interesting
-## Let's look closer into that...
+# Experiment 5 - S. latissima
+dw_sac_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "S. latissima")
+dw_sac_5 <- aov(DW_ratio ~ salinity * temperature * locationnumber, data = dw_sac_5)
 
-# Run pairwise comparisons for the significant interaction salinity:location
-emmeans(dw_model_5, pairwise ~ salinity * locationnumber)
+summary(dw_sac_5)
 
-## So the interaction of salinity and location is almost significant within location 1 for salinities
-## But the interaction becomes the most significant when looking at salinity 20 between the locations
+# Perform SNK tests
+# L. digitata - temperature:location was almost significant, so let's do that here
+dw_dig_5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "L. digitata") %>%
+  mutate(temp_loc = interaction(temperature, locationnumber))
 
-## I also wanna look into how the treatments differ
-### Why isn't the effect of salinity and temperature significant
+dw_snk_dig_5 <- aov(DW_ratio ~ temp_loc, data = dw_dig_5)
+dw_snk_dig_5 <- SNK.test(dw_snk_dig_5, "temp_loc")
+dw_snk_dig_5$groups
 
-emmeans(dw_model_5, pairwise ~ salinity * temperature)
+# S. latissima
+dw_sac_5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "S. latissima") %>%
+  mutate(sal_loc = interaction(salinity, locationnumber))
 
-## So the most significant difference - between 20PSU & 10°C (the control), and 10PSU & 20°C
-### This makes sense since that treatment is the most different from the control
-## Then there's another significant difference between the control and 20°C
-### Which is also seen in the significance of temperature as a main factor
+dw_snk_sac_5 <- aov(DW_ratio ~ sal_loc, data = dw_sac_5)
+dw_snk_sac_5 <- SNK.test(dw_snk_sac_5, "sal_loc")
+dw_snk_sac_5$groups
 
-## Post-hoc test on temperature:location
-
-emmeans(dw_model_5, pairwise ~ temperature * locationnumber)
-
-## The differences here is between the degrees on Ängklåvbukten
-## And the different degrees between the locations as well - 10°C & Ängklåvbukten compared to 20°C & Lökholmen
-
-## Let's check the other two experiments as well - with only two factors
+## Alright so no difference between groups even though the interaction is significant, interesting
 
 # Experiment 6
 dw_data_6 <- kelp_data_combined %>% filter(experiment == "Experiment 6")
-dw_model_6 <- aov(DW_ratio ~ temperature * salinity, data = dw_data_6)
+dw_model_6 <- aov(DW_ratio ~ salinity * temperature, data = dw_data_6)
 
 summary(dw_model_6)
 
-## So here the DW_ratio depends on temperature and salinity as main factors
-### But the interaction is close to being significant
-## Let's do a post-hoc anyways!
-emmeans(dw_model_6, pairwise ~ salinity * temperature)
+# Perform SNK tests
+dw_model_6 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 6") %>%
+  mutate(sal_temp = interaction(salinity, temperature))
 
-## So the reason the interaction isn't significant is because there was no difference between 10PSU & 10°C and 20PSU & 20°C
-## But the main factors are very significant
+dw_snk_6 <- aov(DW_ratio ~ sal_temp, data = dw_model_6)
+dw_snk_6 <- SNK.test(dw_snk_6, "sal_temp")
+dw_snk_6$groups
 
 # Experiment 7
 dw_data_7 <- kelp_data_combined %>% filter(experiment == "Experiment 7")
-dw_model_7 <- aov(DW_ratio ~ temperature * salinity, data = dw_data_7)
+dw_model_7 <- aov(DW_ratio ~ salinity * temperature, data = dw_data_7)
 
 summary(dw_model_7)
 
-## And here only temperature affected the dry wet weight ratio, hmmm
+# Perform SNK tests
+dw_snk_7 <- SNK.test(dw_model_7, c("temperature"))
+dw_snk_7$groups
 
 ## Chlorophyll and carotenoid statistics!!!
-## Let's do very pigment for itself - not grouping them
+## Let's do very pigment for itself
 
 # Experiment 4
 # Chlorophyll a
 chla_data_4 <- kelp_data_combined %>% filter(experiment == "Experiment 4")
-chla_model_4 <- aov(Chlorophyll_a_mg_g ~ temperature * salinity * locationnumber, data = chla_data_4)
+chla_model_4 <- aov(Chlorophyll_a_mg_g ~ salinity * temperature * locationnumber, data = chla_data_4)
 
 summary(chla_model_4)
 
-## Temperature is significant by itself, salinity is almost
+# Perform SNK tests
+chla_snk_4 <- SNK.test(chla_model_4, c("temperature"))
+chla_snk_4$groups
 
 # Chlorophyll c
 chlc_data_4 <- kelp_data_combined %>% filter(experiment == "Experiment 4")
-chlc_model_4 <- aov(Chlorophyll_c_mg_g ~ temperature * salinity * locationnumber, data = chlc_data_4)
+chlc_model_4 <- aov(Chlorophyll_c_mg_g ~ salinity * temperature * locationnumber, data = chlc_data_4)
 
 summary(chlc_model_4)
 
-## No significance
+# Nothing signficant, no need for SNK test
 
 # Carotenoids
 car_data_4 <- kelp_data_combined %>% filter(experiment == "Experiment 4")
-car_model_4 <- aov(Total_carotenoid_mg_g ~ temperature * salinity * locationnumber, data = car_data_4)
+car_model_4 <- aov(Total_carotenoid1_mg_g ~ salinity * temperature * locationnumber, data = car_data_4)
 
 summary(car_model_4)
 
-## No significance
+# Perform SNK test
+car_data_4 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 4") %>%
+  mutate(sal_temp_loc = interaction(salinity, temperature, locationnumber))
+
+car_model_4 <- aov(Total_carotenoid1_mg_g ~ sal_temp_loc, data = car_data_4)
+snk_car_4 <- SNK.test(car_model_4, "sal_temp_loc")
+snk_car_4$groups
 
 # Experiment 5
-# Chlorophyll a
-chla_data_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5")
-chla_model_5 <- aov(Chlorophyll_a_mg_g ~ temperature * salinity * locationnumber * species, data = chla_data_5)
+# Chlorophyll a - L. digitata
+chla_dig_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "L. digitata")
+chla_dig_5 <- aov(Chlorophyll_a_mg_g ~ salinity * temperature * locationnumber, data = chla_dig_5)
 
-summary(chla_model_5)
+summary(chla_dig_5)
 
-## Firstly, the interaction temperature:location:species is a little significant
-## Secondly, temperature:species is a little more significant
-## And then salinity:location is almost significant
-## Species by itself is very significant - S. latissima has a lot more chlorophyll a
-## location is almost significant
-## Salinity is significant
-## And finally temperature is very significant
-### Post-hoc, checking the interaction of temperature and species between locations!
+# Chlorophyll a - S. latissima
+chla_sac_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "S. latissima")
+chla_sac_5 <- aov(Chlorophyll_a_mg_g ~ salinity * temperature * locationnumber, data = chla_sac_5)
 
-## Visualize the data with emmip:
-emmip_chla_5 <- emmip(chla_model_5, temperature ~ salinity | locationnumber | species, CIs = TRUE) +
-  ggtitle("Chlorophyll a - Experiment 5")
-emmip_chla_5
+summary(chla_sac_5)
 
-## S. latissima shows greater differences than L. digitata
-## Let's check the numbers
+# Perform SNK test
+# L. digitata
+chla_dig_5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "L. digitata") %>%
+  mutate(sal_temp = interaction(salinity, temperature))
 
-emm_chla_5 <- emmeans(chla_model_5, pairwise ~ locationnumber * temperature * species)
-pairs(emm_chla_5)
+chla_snk_dig_5 <- aov(Chlorophyll_a_mg_g ~ sal_temp, data = chla_dig_5)
+chla_snk_dig_5 <- SNK.test(chla_snk_dig_5, "sal_temp")
+chla_snk_dig_5$groups
 
-## A lot of significance 
-### But one notable thing is that the comparisons between L. digitata is never significant
+# S. latissima
+chla_sac_5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "S. latissima") %>%
+  mutate(temp_loc = interaction(temperature, locationnumber))
 
-## Salinity:location is also significant
-emmeans(chla_model_5, pairwise ~ salinity * locationnumber)
+chla_snk_sac_5 <- aov(Chlorophyll_a_mg_g ~ temp_loc, data = chla_sac_5)
+chla_snk_sac_5 <- SNK.test(chla_snk_sac_5, "temp_loc")
+chla_snk_sac_5$groups
 
-## There is a difference between salinities in location 1
-### But not when looking at 10PSU between the locations
-### And location 2 doesn't seem to have a difference between salinities
-## When comparing 20PSU between the locations it is almost significant
+# Chlorophyll c - L. digitata
+chlc_dig_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "L. digitata")
+chlc_dig_5 <- aov(Chlorophyll_c_mg_g ~ salinity * temperature * locationnumber, data = chlc_dig_5)
 
-# Chlorophyll c
-chlc_data_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5")
-chlc_model_5 <- aov(Chlorophyll_c_mg_g ~ temperature * salinity * locationnumber * species, data = chlc_data_5)
+summary(chlc_dig_5)
 
-summary(chlc_model_5)
+# Experiment 5
+# Chlorophyll c - S. latissima
+chlc_sac_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "S. latissima")
+chlc_sac_5 <- aov(Chlorophyll_c_mg_g ~ salinity * temperature * locationnumber, data = chlc_sac_5)
 
-## The four-way interaction is almost significant, and so is salinity:location:species
-## temperature:species is significant
-## Species is very significant by itself - meaning there's a big difference in pigment concentration here as well
-### S. latissima has more chlorophyll c as well
-## Salinity is a little significant
-## Temperature is very significant
-## Post-hoc!
+summary(chlc_sac_5)
 
-## Post-hoc on the four factors - but since species is very significant we don't need to look more into that
-emm_chlc_5 <- emmeans(chlc_model_5, ~ salinity * temperature * locationnumber | species)
+# Perform SNK test
+# None for L. digitata
+# Salinity and temperature as main factors for S. latissima
+chlc_snk_sac_5 <- SNK.test(chlc_sac_5, c("salinity", "temperature"))
+chlc_snk_sac_5$groups
 
-## Since we have many factors we use tukey
-pairs(emm_chlc_5, adjust = "tukey")
+# Carotenoids - L. digitata
+car_dig_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "L. digitata")
+car_dig_5 <- aov(Total_carotenoid_mg_g ~ salinity * temperature * locationnumber, data = car_dig_5)
 
-## So there are no significant comparisons for L. digitata
-### So the difference between S. latissima and L. digitata could be the deciding factor
-## But there are some significant differences for S. latissima
+summary(car_dig_5)
 
-## Visualizing the differences!!
-emmip_chlc_5 <- emmip(chlc_model_5, temperature ~ salinity | locationnumber | species, CIs = TRUE) +
-  ggtitle("Chlorophyll c - Experiment 5")
-emmip_chlc_5
+# Carotenoids - S. latissima
+car_sac_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5", species == "S. latissima")
+car_sac_5 <- aov(Total_carotenoid_mg_g ~ salinity * temperature * locationnumber, data = car_sac_5)
 
-## We can see that L. digitata doesn't vary a lot between salinities and temperature
-## They have a pretty linear response - especially in location 1
-### But in location 2 they have more pigment in 20PSU and 10°C than in the other, although CI are overlapping
-### This most likely means that they aren't different at all
-## S. latissima has a very different response though
-### They do so much better in 10°C but they have more pigments in 20PSU for location 1
-## And for location 2 the response is kind of linear - although they have more pigments in 10°C
-### But it seems to be a little more in 10PSU there for some reason...
+summary(car_sac_5)
 
-# Carotenoids
-car_data_5 <- kelp_data_combined %>% filter(experiment == "Experiment 5")
-car_model_5 <- aov(Total_carotenoid_mg_g ~ temperature * salinity * locationnumber * species, data = car_data_5)
+# Perform SNK test
+# L. digitata
+car_dig_5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "L. digitata") %>%
+  mutate(sal_temp = interaction(salinity, temperature))
 
-summary(car_model_5)
+car_snk_dig_5 <- aov(Total_carotenoid_mg_g ~ sal_temp, data = car_dig_5)
+car_snk_dig_5 <- SNK.test(car_snk_dig_5, "sal_temp")
+car_snk_dig_5$groups
 
-## Four-way interaction is significant
-## All the three-way interactions including species is either significant or very close to
-### So species likely plays a big role here as well
-## Temperature:location is significant
-## Species as a main factor is significant
-## And salinity as well - but not temperature this time?
-### So carotenoids might not be affected by temperature the same way chlorophyll is?
+# S. latissima
+car_sac_5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "S. latissima") %>%
+  mutate(temp_loc = interaction(temperature, locationnumber))
 
-## Post-hoc - but here species isn't as significant so we could start looking at the emmip
-
-emmip_car_5 <- emmip(car_model_5, temperature ~ salinity | locationnumber | species, CIs = TRUE) +
-  ggtitle("Carotenoid content - Experiment 5")
-emmip_car_5
-
-## So there are two instances where the CIs don't overlap - and that's for S. latissima
-### Something that's weird is that S. latissima has more carotenoids in 20°C than in 10°C for location 1
-## Let's do the same emmeans - L. digitata doesn't seem to differ a lot
-
-emm_car_5 <- emmeans(car_model_5, pairwise ~ salinity * temperature * locationnumber | species)
-pairs(emm_car_5)
-
-## Most of the significant comparisons come from S. latissima, but L. digitata has one comparison
-### It's between salinities within location and temperature - which is almost significant
-## Otherwise S. latissima has the most significant ones
-### But they're not strongly significant, and some are only close to being
-## But most of them are between locations
+car_snk_sac_5 <- aov(Total_carotenoid_mg_g ~ temp_loc, data = car_sac_5)
+car_snk_sac_5 <- SNK.test(car_snk_sac_5, "temp_loc")
+car_snk_sac_5$groups
 
 # Experiment 6
 # Chlorophyll a
 chla_data_6 <- kelp_data_combined %>% filter(experiment == "Experiment 6")
-chla_model_6 <- aov(Chlorophyll_a_mg_g ~ temperature * salinity, data = chla_data_6)
+chla_model_6 <- aov(Chlorophyll_a_mg_g ~ salinity * temperature, data = chla_data_6)
 
 summary(chla_model_6)
 
-## Salinity is very significant, while temperature is a little significant
-## Not the interaction though
+# Perform SNK test
+chla_snk_6 <- SNK.test(chla_model_6, c("salinity", "temperature"))
+chla_snk_6$groups
 
 # Chlorophyll c
 chlc_data_6 <- kelp_data_combined %>% filter(experiment == "Experiment 6")
-chlc_model_6 <- aov(Chlorophyll_c_mg_g ~ temperature * salinity, data = chlc_data_6)
+chlc_model_6 <- aov(Chlorophyll_c_mg_g ~ salinity * temperature, data = chlc_data_6)
 
 summary(chlc_model_6)
 
-## Here only salinity is significant
+# Perform SNK test
+chlc_snk_6 <- SNK.test(chlc_model_6, c("salinity"))
+chlc_snk_6$groups
 
 # Carotenoids
 car_data_6 <- kelp_data_combined %>% filter(experiment == "Experiment 6")
-car_model_6 <- aov(Total_carotenoid_mg_g ~ temperature * salinity, data = car_data_6)
+car_model_6 <- aov(Total_carotenoid_mg_g ~ salinity * temperature, data = car_data_6)
 
 summary(car_model_6)
-
-## Here nothing is significant?
 
 # Experiment 7
 # Chlorophyll a
 chla_data_7 <- kelp_data_combined %>% filter(experiment == "Experiment 7")
-chla_model_7 <- aov(Chlorophyll_a_mg_g ~ temperature * salinity, data = chla_data_7)
+chla_model_7 <- aov(Chlorophyll_a_mg_g ~ salinity * temperature, data = chla_data_7)
 
 summary(chla_model_7)
 
-## Salinity is significant
-## The interaction is almost significant
-## Let's check that with post-hoc test, tukey
+# Perform SNK test
+chla_data_7 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 7") %>%
+  mutate(sal_temp = interaction(salinity, temperature))
 
-emm_chla_7 <- emmeans(chla_model_7, pairwise ~ salinity * temperature)
-pairs(emm_chla_7)
-
-emmip_chla_7 <- emmip(chla_model_7, temperature ~ salinity, CIs = TRUE) +
-  ggtitle ("Chlorophyll a - Experiment 7")
-emmip_chla_7
-
-## So the differences appear when comparing salinities - 10PSU & 10°C with 20PSU & 10°C and 10PSU & 17°C with 20PSU & 17°C
-### We can see that they have more chlorophyll a in higher salinities (higher means - negative estimates)
-## And there is also a significance when comparing the interactions - 10PSU & 10°C with 20PSU & 17°C and 20PSU & 10°C with 10PSU & 17°C
-## This is probably why the interaction is close to being significant. But it only close since the temperature comparisons aren't significant I guess?
-### But we can see that they have more chlorophyll a in high salinity and high temperature than in low salinity low temperature
-## So salinity is most likely the deciding factor when looking at chlorophyll a
+chla_snk_7 <- aov(Chlorophyll_a_mg_g ~ sal_temp, data = chla_data_7)
+chla_snk_7 <- SNK.test(chla_snk_7, "sal_temp")
+chla_snk_7$groups
 
 # Chlorophyll c
 chlc_data_7 <- kelp_data_combined %>% filter(experiment == "Experiment 7")
-chlc_model_7 <- aov(Chlorophyll_c_mg_g ~ temperature * salinity, data = chlc_data_7)
+chlc_model_7 <- aov(Chlorophyll_c_mg_g ~ salinity * temperature, data = chlc_data_7)
 
 summary(chlc_model_7)
 
-## Salinity is significant
+# Perform SNK test
+chlc_snk_7 <- SNK.test(chlc_model_7, c("salinity"))
+chlc_snk_7$groups
 
 # Carotenoids
 car_data_7 <- kelp_data_combined %>% filter(experiment == "Experiment 7")
-car_model_7 <- aov(Total_carotenoid_mg_g ~ temperature * salinity, data = car_data_7)
+car_model_7 <- aov(Total_carotenoid_mg_g ~ salinity * temperature, data = car_data_7)
 
 summary(car_model_7)
 
-## Salinity is significant
-### We should visualize these results also
+# Perform SNK test
+car_snk_7 <- SNK.test(car_model_7, c("salinity"))
+car_snk_7$groups
 
-## SGR plots!
-
-# Calculate mean SGR_total and standard error for each treatment
-sgr_summary <- kelp_data_combined %>%
-  group_by(temperature, salinity, treatment, species, experiment) %>%
-  summarise(
-    mean_SGR = mean(SGR_total, na.rm = TRUE),  # Calculate mean SGR_total
-    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),  # Standard error of the mean
-    .groups = "drop"
-  )
-
-# Add total days the experiments ran for and create experiment labels
-sgr_summary <- sgr_summary %>%
-  mutate(experiment_label = case_when(
-    experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
-    experiment == "Experiment 5" ~ "Experiment 5\n(14 days)",
-    experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
-    experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
-  ))
-
-# Create the plot with only SGR_total
-sgr_barplot <- ggplot(sgr_summary, aes(x = treatment, y = mean_SGR, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) +
-  scale_fill_manual(values = species_colours) +
-  geom_errorbar(
-    aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR), 
-    width = 0.2, 
-    position = position_dodge(0.7)
-  ) +
-  facet_grid(. ~ experiment_label, scales = "free_x") +  # Facet only by experiment
-  labs(
-    title = "SGR",
-    x = "Treatment",
-    y = expression("SGR (% day"^-1*")"),
-    fill = "Species"
-  ) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "top"
-  )
-
-# Display the plot
-print(sgr_barplot)
-
-## Location is not included here, but I want to look into that!
-### So let's do two plots for experiment 4 and 5, with locations included
-## Let's start with experiment 4!
-# Calculate mean SGR_total and standard error for each treatment
-sgr_exp4 <- kelp_data_combined %>%
-  filter(experiment == "Experiment 4") %>%
-  group_by(temperature, salinity, treatment, location, species) %>%
-  summarise(
-    mean_SGR = mean(SGR_total, na.rm = TRUE),
-    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),  # Add "PSU" to salinity
-    location_label = paste0(location)
-  )
-
-# Ensure the x-axis is treated as a factor (to maintain order)
-sgr_exp4$sal_temperature <- factor(sgr_exp4$sal_temp, levels = unique(sgr_exp4$sal_temp))
-
-# Define positions for vertical lines (between salinities)
-sal_break41 <- c(2.5, 4.5)  # Adjust based on the number of salinity levels
-
-sgr_plot4 <- ggplot(sgr_exp4, aes(x = treatment, y = mean_SGR, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-  geom_errorbar(aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR), 
-                width = 0.2, position = position_dodge(0.7)) +
-  scale_fill_manual(values = species_colours) +
-  # Add vertical lines between different salinities
-  geom_vline(xintercept = sal_break41, linetype = "dashed", color = "gray50") +
-  
-  facet_grid(. ~ location_label) +
-  labs(
-    title = "SGR - Experiment 4",
-    x = "Treatment",
-    y = expression("Mean SGR (% day"^-1*")"),
-    fill = "Species"
-  ) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1), 
-    legend.position = "top",
-    panel.spacing.x = unit(2, "lines")  # Add spacing between temperature facets
-  )
-
-# Display the plot
-print(sgr_plot4)
-
-## I kinda like this look, but changing temperature and location also works
-
-# Let's move onto experiment 5!
-sgr_exp5 <- kelp_data_combined %>%
-  filter(experiment == "Experiment 5") %>%
-  group_by(temperature, salinity, treatment, location, species) %>%
-  summarise(
-    mean_SGR = mean(SGR_total, na.rm = TRUE),
-    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),  # Add "PSU" to salinity
-    location_label = paste0(location)
-  )
-# Ensure the x-axis is treated as a factor (to maintain order)
-sgr_exp5$sal_temperature <- factor(sgr_exp5$sal_temp, levels = unique(sgr_exp5$sal_temp))
-
-# Define positions for vertical lines (between salinities)
-sal_break51 <- c(2.5)
-
-sgr_plot5 <- ggplot(sgr_exp5, aes(x = treatment, y = mean_SGR, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-  geom_errorbar(aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR), 
-                width = 0.2, position = position_dodge(0.7)) +
-  scale_fill_manual(values = species_colours) +
-  geom_vline(xintercept = sal_break51, linetype = "dashed", color = "gray50") +
-  
-  facet_grid(. ~ location_label) +
-  labs(
-    title = "SGR - Experiment 5",
-    x = "Treatment",
-    y = expression("Mean SGR (% day"^-1*")"),
-    fill = "Species"
-  ) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1), 
-    legend.position = "top",
-    panel.spacing.x = unit(2, "lines")  # Add spacing between temperature facets
-  )
-
-# Display the plot
-print(sgr_plot5)
-
-## This looks so much nicer - cause this one is easier to read :)
-
-## Line plot of how the weight changes over time!!
+# PLOTS
+## Line plot of how the weight changes over time!
+# Global factor order definition
+factor_order <- c(
+  # Salinity & Temperature
+  "10PSU & 10°C", "10PSU & 17°C", "10PSU & 20°C", "20PSU & 10°C", "20PSU & 17°C", "20PSU & 20°C", "30PSU & 10°C", "30PSU & 20°C",
+  # Temperature & Location
+  "10°C & Ängklåvbukten", "10°C & Lökholmen", "20°C & Ängklåvbukten", "20°C & Lökholmen", "30°C & Ängklåvbukten", "30°C & Lökholmen",
+  # Salinity & Location
+  "10PSU & Ängklåvbukten", "10PSU & Lökholmen", "20PSU & Ängklåvbukten", "20PSU & Lökholmen", "30PSU & Ängklåvbukten", "30PSU & Lökholmen"
+)
 
 # Summarize mean weight and standard error
 weight_summary_mean <- kelp_data_combined %>%
@@ -791,7 +638,9 @@ weight_plot <- ggplot(weight_summary_mean, aes(x = days, y = mean_weight, color 
   theme_bw() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "right"
+    legend.position = "right",
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
   ) +
   scale_color_manual(values = c(
     "30PSU & 20°C" = "darkmagenta",
@@ -808,19 +657,83 @@ weight_plot <- ggplot(weight_summary_mean, aes(x = days, y = mean_weight, color 
 # Display the plot
 print(weight_plot)
 
-## Dry:wet weight ratio plots!!
-
-# Calculate mean W:D-ratio and standard error for each treatment, species, and experiment
-dw_summary <- kelp_data_combined %>%
-  group_by(treatment, species, experiment) %>%
+## SGR plot!
+# Calculate mean SGR_total and standard error for each treatment
+sgr_summary <- kelp_data_combined %>%
+  group_by(temperature, salinity, treatment, species, experiment) %>%
   summarise(
-    mean_DW_ratio = mean(`DW_ratio`, na.rm = TRUE),  # Calculate mean wet:dry ratio
-    se_DW_ratio = sd(`DW_ratio`, na.rm = TRUE) / sqrt(n()),  # Standard error of the mean
+    mean_SGR = mean(SGR_total, na.rm = TRUE),  # Calculate mean SGR_total
+    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),  # Standard error of the mean
     .groups = "drop"
   )
 
-# Create the plot for wet:dry weight ratio (D:W-ratio)
-dw_ratio_barplot <- ggplot(dw_summary, aes(x = treatment, y = mean_DW_ratio, fill = species)) +
+# Add total days the experiments ran for and create experiment labels
+sgr_summary <- sgr_summary %>%
+  mutate(experiment_label = case_when(
+    experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
+    experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
+    experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
+    experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
+    experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
+  ))
+
+
+# Create the plot with only SGR_total
+sgr_barplot <- ggplot(sgr_summary, aes(x = treatment, y = mean_SGR, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) +
+  scale_fill_manual(values = species_colours) +
+  geom_errorbar(
+    aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR), 
+    width = 0.2, 
+    position = position_dodge(0.7)
+  ) +
+  facet_grid(. ~ experiment_label, scales = "free_x") +
+  labs(
+    title = "Specific Growth rate",
+    x = "Treatment",
+    y = expression("SGR (% day"^-1*")"),
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
+  )
+
+# Display the plot
+print(sgr_barplot)
+
+# DW-ratio!!
+# Add total days and create a customized x-label
+dw_summary <- kelp_data_combined %>%
+  mutate(
+    experiment_label = case_when(
+      experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
+      experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
+      experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
+      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
+      experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
+    ),
+    x_label = case_when(
+      experiment == "Experiment 5" & species == "L. digitata" ~ paste0(temperature, "°C & ", location),
+      experiment == "Experiment 5" & species == "S. latissima" ~ paste0(salinity, "PSU & ", location),
+      TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
+    )
+  ) %>%
+  group_by(experiment_label, x_label, species) %>%
+  summarise(
+    mean_DW_ratio = mean(DW_ratio, na.rm = TRUE),
+    se_DW_ratio = sd(DW_ratio, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# Apply the custom label
+dw_summary$x_label <- factor(dw_summary$x_label, levels = factor_order)
+
+# Create the plot
+dw_barplot <- ggplot(dw_summary, aes(x = x_label, y = mean_DW_ratio, fill = species)) +
   geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
   geom_errorbar(
     aes(ymin = mean_DW_ratio - se_DW_ratio, ymax = mean_DW_ratio + se_DW_ratio), 
@@ -828,7 +741,7 @@ dw_ratio_barplot <- ggplot(dw_summary, aes(x = treatment, y = mean_DW_ratio, fil
     position = position_dodge(0.7)
   ) +
   scale_fill_manual(values = species_colours) +
-  facet_grid(. ~ experiment, scales = "free_x") +
+  facet_grid(. ~ experiment_label, scales = "free_x") +
   labs(
     title = "Dry to wet weight-ratio",
     x = "Treatment",
@@ -838,262 +751,312 @@ dw_ratio_barplot <- ggplot(dw_summary, aes(x = treatment, y = mean_DW_ratio, fil
   theme_bw() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "top"
+    legend.position = "top",
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
   )
 
 # Display the plot
-print(dw_ratio_barplot)
+print(dw_barplot)
 
-## This looks weird
-### It doesn't look like the treatments are different - even though we might expect the lower salinity to accumulate more water
-### But S. latissima is different from digitata in Experiment 5 - clearly
-### And 30PSU & 10°C seems to be pretty different from the other treatments in Experiment 4 though
-
-## Let's check at experiment 4 and 5 separately!
-
-# Experiment 4
-dw_exp4 <- kelp_data_combined %>%
-  filter(experiment == "Experiment 4") %>%
-  group_by(temperature, salinity, treatment, location, species) %>%
-  summarise(
-    mean_DW = mean(DW_ratio, na.rm = TRUE),
-    se_DW = sd(DW_ratio, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop"
-  ) %>%
+# Chlorophyll a time!
+# Same here, apply number of days and add custom label
+chla_summary <- kelp_data_combined %>%
   mutate(
-    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),  # Add "PSU" to salinity
-    location_label = paste0(location)
+    location = factor(location, levels = c("Ängklåvbukten", "Lökholmen", "Klövskär", "Klåvningarna")),
+    experiment_label = case_when(
+      experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
+      experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
+      experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
+      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
+      experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
+    ),
+    x_label = case_when(
+      experiment == "Experiment 5" & species == "L. digitata" ~ paste0(salinity, "PSU & ", temperature, "°C"),
+      experiment == "Experiment 5" & species == "S. latissima" ~ paste0(temperature, "°C & ", location),
+      TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
+    ),
+    x_label = factor(x_label, levels = unique(x_label))  # Convert x_label to a factor with explicit order
+  ) %>%
+  group_by(experiment_label, x_label, species) %>%
+  summarise(
+    mean_chla = mean(`Chlorophyll_a_mg_g`, na.rm = TRUE),
+    se_chla = sd(`Chlorophyll_a_mg_g`, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
   )
-# Ensure the x-axis is treated as a factor (to maintain order)
-dw_exp4$sal_temperature <- factor(dw_exp4$sal_temp, levels = unique(dw_exp4$sal_temp))
 
-# Define positions for vertical lines (between salinities)
-sal_break42 <- c(2.5, 4.5)
+# Apply the custom label
+chla_summary$x_label <- factor(chla_summary$x_label, levels = factor_order)
 
-dw_plot4 <- ggplot(dw_exp4, aes(x = treatment, y = mean_DW, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-  geom_errorbar(aes(ymin = mean_DW - se_DW, ymax = mean_DW + se_DW), 
-                width = 0.2, position = position_dodge(0.7)) +
+# Create the plot
+chla_barplot <- ggplot(chla_summary, aes(x = x_label, y = mean_chla, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
+  geom_errorbar(
+    aes(ymin = mean_chla - se_chla, ymax = mean_chla + se_chla), 
+    width = 0.2, 
+    position = position_dodge(0.7)
+  ) +
   scale_fill_manual(values = species_colours) +
-  geom_vline(xintercept = sal_break42, linetype = "dashed", color = "gray50") +
-  
-  facet_grid(. ~ location_label) +
+  facet_grid(. ~ experiment_label, scales = "free_x") +
   labs(
-    title = "Dry to wet weight-ratio - Experiment 4",
+    title = "Chlorophyll a",
     x = "Treatment",
-    y = "Mean D:W ratio",
+    y = "Mean Chlorophyll a (mg/g)",
     fill = "Species"
   ) +
   theme_bw() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "top",
-    panel.spacing.x = unit(2, "lines")  # Add spacing between temperature facets
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
   )
 
 # Display the plot
-print(dw_plot4)
+print(chla_barplot)
 
-# Experiment 5
-dw_exp5 <- kelp_data_combined %>%
-  filter(experiment == "Experiment 5") %>%
-  group_by(temperature, salinity, treatment, location, species) %>%
+# Chlorophyll c time!
+# Calculate mean Chlorophyll c and standard error
+chlc_summary <- kelp_data_combined %>%
+  group_by(treatment, species, experiment) %>%
   summarise(
-    mean_DW = mean(DW_ratio, na.rm = TRUE),
-    se_DW = sd(DW_ratio, na.rm = TRUE) / sqrt(n()),
+    mean_chlc = mean(`Chlorophyll_c_mg_g`, na.rm = TRUE),  
+    se_chlc = sd(`Chlorophyll_c_mg_g`, na.rm = TRUE) / sqrt(n()),  
     .groups = "drop"
-  ) %>%
-  mutate(
-    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),  # Add "PSU" to salinity
-    location_label = paste0(location)
   )
-# Ensure the x-axis is treated as a factor (to maintain order)
-dw_exp5$sal_temperature <- factor(dw_exp5$sal_temp, levels = unique(dw_exp5$sal_temp))
 
-# Define positions for vertical lines (between salinities)
-sal_break52 <- c(2.5)
+# Add number of days, no need for the custom label here
+chlc_summary <- chlc_summary %>%
+  mutate(experiment_label = case_when(
+    experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
+    experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
+    experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
+    experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
+    experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
+  ))
 
-dw_plot5 <- ggplot(dw_exp5, aes(x = treatment, y = mean_DW, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-  geom_errorbar(aes(ymin = mean_DW - se_DW, ymax = mean_DW + se_DW), 
-                width = 0.2, position = position_dodge(0.7)) +
+# Create the plot
+chlc_barplot <- ggplot(chlc_summary, aes(x = treatment, y = mean_chlc, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
+  geom_errorbar(
+    aes(ymin = mean_chlc - se_chlc, ymax = mean_chlc + se_chlc), 
+    width = 0.2, 
+    position = position_dodge(0.7)
+  ) +
   scale_fill_manual(values = species_colours) +
-  geom_vline(xintercept = sal_break52, linetype = "dashed", color = "gray50") +
-  
-  facet_grid(. ~ location_label) +
+  facet_grid(. ~ experiment_label, scales = "free_x") +
   labs(
-    title = "Dry to wet weight-ratio - Experiment 5",
+    title = "Chlorophyll c1 + c2",
     x = "Treatment",
-    y = "Mean D:W ratio",
+    y = "Mean Chlorophyll c (mg/g)",
     fill = "Species"
   ) +
   theme_bw() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "top",
-    panel.spacing.x = unit(2, "lines")  # Add spacing between temperature facets
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
   )
 
 # Display the plot
-print(dw_plot5)
+print(chlc_barplot)
 
-## Cool!! Moving on to pigments now :)
-# Reshape data: Convert pigments into long format
-pigm_long <- kelp_data_combined %>%
-  pivot_longer(cols = c("Chlorophyll_a_mg_g", "Chlorophyll_c_mg_g", "Total_carotenoid_mg_g"),
-               names_to = "pigment",
-               values_to = "value")
-
-# Summarize data: Calculate mean and standard error for each pigment type
-pigm_summary <- pigm_long %>%
-  group_by(treatment, species, experiment, pigment) %>%
-  summarise(
-    mean_pig = mean(value, na.rm = TRUE),
-    se_pig = sd(value, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop"
-  )
-
-# Define custom colors for pigments
-pigment_colors <- c("Chlorophyll_a_mg_g" = "aquamarine4",
-                    "Chlorophyll_c_mg_g" = "chartreuse",
-                    "Total_carotenoid_mg_g" = "yellow")
-
-# Function to create one plot per experiment
-plot_experiment <- function(exp_num) {
-  ggplot(filter(pigm_summary, experiment == exp_num), aes(x = treatment, y = mean_pig, fill = pigment, color = species)) +
-    geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.6, linewidth = 1) +
-    geom_errorbar(aes(ymin = mean_pig - se_pig, ymax = mean_pig + se_pig),
-                  width = 0.2, position = position_dodge(0.7)) +
-    scale_fill_manual(values = pigment_colors, 
-                      labels = c("Chlorophyll_a_mg_g" = "Chlorophyll a",
-                                 "Chlorophyll_c_mg_g" = "Chlorophyll c1 + c2",
-                                 "Total_carotenoid_mg_g" = "Total Carotenoids")) +
-    scale_color_manual(values = species_colours) +
-    labs(
-      title = paste("Pigment Concentrations - ", exp_num),
-      x = "Treatment",
-      y = "Mean Concentration (mg/g)",
-      fill = "Pigment",
-      color = "Species"
-    ) +
-    theme_bw() +
-    theme(
-      axis.text.x = element_text(angle = 45, hjust = 1),
-      legend.position = "top"
+# Carotenoids!
+# First alternative:
+# Add number of days and custom label :)
+car_summary <- kelp_data_combined %>%
+  mutate(
+    location = factor(location, levels = c("Ängklåvbukten", "Lökholmen", "Klövskär", "Klåvningarna")),
+    experiment_label = case_when(
+      experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
+      experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
+      experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
+      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
+      experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
+    ),
+    x_label = case_when(
+      experiment == "Experiment 5" & species == "L. digitata" ~ paste0(salinity, "PSU & ", temperature, "°C"),
+      experiment == "Experiment 5" & species == "S. latissima" ~ paste0(temperature, "°C & ", location),
+      TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
     )
-}
-
-# Generate plots for each experiment
-experiments <- unique(pigm_summary$experiment)
-pig_plots <- lapply(experiments, plot_experiment)
-
-# Display all plots
-pig_plots
-
-## Also, we should do a location based plot for pigments as well!
-### That'd be cool :)
-
-# Experiment 4
-# Filter for Experiment 4 & summarize data
-pigm_summary_exp4 <- pigm_long %>%
-  filter(experiment == "Experiment 4") %>%
-  group_by(temperature, salinity, treatment, location, species, pigment) %>%
-  summarise(
-    mean_pig = mean(value, na.rm = TRUE),
-    se_pig = sd(value, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop"
   ) %>%
-  mutate(
-    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),  # Add "PSU" to salinity
-    location_label = as.character(location)
+  group_by(experiment_label, x_label, species) %>%
+  summarise(
+    mean_car = mean(`Total_carotenoid_mg_g`, na.rm = TRUE),
+    se_car = sd(`Total_carotenoid_mg_g`, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
   )
 
-# Ensure correct x-axis order
-pigm_summary_exp4$sal_temperature <- factor(pigm_summary_exp4$sal_temp, levels = unique(pigm_summary_exp4$sal_temp))
-
-# Define vertical line positions
-sal_break43 <- c(2.5, 4.5)
+# Apply the custom label!
+car_summary$x_label <- factor(car_summary$x_label, levels = factor_order)
 
 # Create the plot
-pigm_exp4 <- ggplot(pigm_summary_exp4, aes(x = treatment, y = mean_pig, fill = pigment, color = species)) +
-  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-  geom_errorbar(aes(ymin = mean_pig - se_pig, ymax = mean_pig + se_pig), 
-                width = 0.2, position = position_dodge(0.7)) +
-  scale_color_manual(values = species_colours) + 
-  scale_fill_manual(values = pigment_colors, 
-                    labels = c("Chlorophyll_a_mg_g" = "Chlorophyll a",
-                               "Chlorophyll_c_mg_g" = "Chlorophyll c1 + c2",
-                               "Total_carotenoid_mg_g" = "Total Carotenoids")) +
-  geom_vline(xintercept = sal_break43, linetype = "dashed", color = "gray50") +
-  
-  facet_grid(. ~ location_label) +
+car_barplot1 <- ggplot(car_summary, aes(x = x_label, y = mean_car, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
+  geom_errorbar(
+    aes(ymin = mean_car - se_car, ymax = mean_car + se_car), 
+    width = 0.2, 
+    position = position_dodge(0.7)
+  ) +
+  scale_fill_manual(values = species_colours) +
+  facet_grid(. ~ experiment_label, scales = "free_x") +
   labs(
-    title = "Pigment Concentrations - Experiment 4",
+    title = "Total Carotenoids",
     x = "Treatment",
-    y = "Mean Concentration (mg/g)",
-    fill = "Pigment",
-    color = "Species"
+    y = "Mean carotenoid content (mg/g)",
+    fill = "Species"
   ) +
   theme_bw() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "top",
-    panel.spacing.x = unit(2, "lines")
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
   )
 
 # Display the plot
-print(pigm_exp4)
+print(car_barplot1)
 
-# Experiment 5
-# Filter for Experiment 5 & summarize data
-pigm_summary_exp5 <- pigm_long %>%
-  filter(experiment == "Experiment 5") %>%
-  group_by(temperature, salinity, location, treatment, species, pigment) %>%
-  summarise(
-    mean_pig = mean(value, na.rm = TRUE),
-    se_pig = sd(value, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop"
+# Second alternative:
+# Add number of days and custom label
+car_summary <- kelp_data_combined %>%
+  mutate(
+    experiment_label = case_when(
+      experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
+      experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
+      experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
+      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
+      experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
+    ),
+    location_label = ifelse(experiment == "Experiment 4", as.character(location), ""),
+    x_label = case_when(
+      experiment == "Experiment 5" & species == "S. latissima" ~ paste0(temperature, "°C & ", location),
+      experiment == "Experiment 4" ~ paste0(salinity, "PSU & ", temperature, "°C"),
+      TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
+    )
   ) %>%
   mutate(
-    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),  # Add "PSU" to salinity
-    location_label = as.character(location)
+    location_label = factor(location_label, 
+                            levels = c("Ängklåvbukten", "Lökholmen", "Klövskär", "Klåvningarna", ""))
+  ) %>%
+  group_by(experiment_label, location_label, x_label, species) %>%
+  summarise(
+    mean_car = mean(`Total_carotenoid_mg_g`, na.rm = TRUE),
+    se_car = sd(`Total_carotenoid_mg_g`, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
   )
 
-# Ensure correct x-axis order
-pigm_summary_exp5$sal_temperature <- factor(pigm_summary_exp5$sal_temp, levels = unique(pigm_summary_exp5$sal_temp))
+# Apply the x-axis order
+car_summary$x_label <- factor(car_summary$x_label, levels = factor_order)
 
-# Define vertical line positions
-sal_break53 <- c(2.5)
-
-# Create the plot
-pigm_exp5 <- ggplot(pigm_summary_exp5, aes(x = treatment, y = mean_pig, fill = pigment, color = species)) +
-  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
-  geom_errorbar(aes(ymin = mean_pig - se_pig, ymax = mean_pig + se_pig), 
-                width = 0.2, position = position_dodge(0.7)) +
-  scale_color_manual(values = species_colours) + 
-  scale_fill_manual(values = pigment_colors, 
-                    labels = c("Chlorophyll_a_mg_g" = "Chlorophyll a",
-                               "Chlorophyll_c_mg_g" = "Chlorophyll c1 + c2",
-                               "Total_carotenoid_mg_g" = "Total Carotenoids")) +
-  geom_vline(xintercept = sal_break53, linetype = "dashed", color = "gray50") +
-  
-  facet_grid(. ~ location_label) +
+# Create the barplot
+car_barplot2 <- ggplot(car_summary, aes(x = x_label, y = mean_car, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
+  geom_errorbar(
+    aes(ymin = mean_car - se_car, ymax = mean_car + se_car), 
+    width = 0.2, 
+    position = position_dodge(0.7)
+  ) +
+  scale_fill_manual(values = species_colours) +
+  facet_nested(
+    . ~ experiment_label + location_label, 
+    scales = "free_x",
+    nest_line = TRUE,
+    remove_labels = "y",
+    drop = TRUE 
+  ) +
   labs(
-    title = "Pigment Concentrations - Experiment 5",
+    title = "Total Carotenoids",
     x = "Treatment",
-    y = "Mean Concentration (mg/g)",
-    fill = "Pigment",
-    color = "Species"
+    y = "Mean carotenoid content (mg/g)",
+    fill = "Species"
   ) +
   theme_bw() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1), 
+    axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "top",
-    panel.spacing.x = unit(2, "lines")
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
   )
 
 # Display the plot
-print(pigm_exp5)
+print(car_barplot2)
+
+
+# Third alternative:
+# Here we'll create two separate plots, one for Experiment 4 and then one for the rest
+# Find the common y-axis limit for all experiments, so that we have the same for both plots
+y_max <- max(car_summary$mean_car + car_summary$se_car, na.rm = TRUE)
+
+# Plot for Experiment 4
+car_summary_exp4 <- car_summary %>%
+  filter(experiment_label == "Experiment 4\n(12 days)")
+
+# Apply the custom x-labels
+car_summary_exp4$x_label <- factor(car_summary_exp4$x_label, levels = factor_order)
+
+# Create the plot for Experiment 4
+car_barplot3_1 <- ggplot(car_summary_exp4, aes(x = x_label, y = mean_car, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = mean_car - se_car, ymax = mean_car + se_car),
+    width = 0.2,
+    position = position_dodge(0.7)
+  ) +
+  scale_fill_manual(values = species_colours) +
+  facet_nested(. ~ location_label, scales = "free_x", nest_line = TRUE) +
+  coord_cartesian(ylim = c(0, y_max)) +
+  labs(
+    title = "Experiment 4: Total Carotenoids",
+    x = "Treatment",
+    y = "Mean carotenoid content (mg/g)",
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
+  )
+
+# Plot for Experiments 5 – 7
+car_summary_exp5to7 <- car_summary %>%
+  filter(experiment_label != "Experiment 4\n(12 days)")
+
+# Apply the custom x-labels
+car_summary_exp5to7$x_label <- factor(car_summary_exp5to7$x_label, levels = factor_order)
+
+# Create the plot
+car_barplot3_2 <- ggplot(car_summary_exp5to7, aes(x = x_label, y = mean_car, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) +
+  geom_errorbar(
+    aes(ymin = mean_car - se_car, ymax = mean_car + se_car),
+    width = 0.2,
+    position = position_dodge(0.7)
+  ) +
+  scale_fill_manual(values = species_colours) +
+  facet_grid(. ~ experiment_label, scales = "free_x") +
+  coord_cartesian(ylim = c(0, y_max)) +
+  labs(
+    title = "Experiments 5 – 7: Total Carotenoids",
+    x = "Treatment",
+    y = "Mean carotenoid content (mg/g)",
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    strip.background = element_rect(fill = "lightgrey", color = "black"),
+    strip.text.x = element_text(face = "bold")
+  )
+
+# Display plots separately
+print(car_barplot3_1)
+print(car_barplot3_2)
+
 
 # Salinity fluctuations
 # Identify all salinity measurement columns
@@ -1108,15 +1071,15 @@ kelp_salinity <- kelp_data_combined %>%
     values_to = "salinity_value"
   ) %>%
   mutate(
-    timepoint = gsub("sal_", "", timepoint),  # Remove 'sal_' prefix
-    timepoint = as.numeric(timepoint),  # Attempt to convert to numeric
-    salinity_value = as.numeric(salinity_value)  # Ensure values are numeric
+    timepoint = gsub("sal_", "", timepoint),  
+    timepoint = as.numeric(timepoint),  
+    salinity_value = as.numeric(salinity_value)
   ) %>%
   filter(!is.na(timepoint) & !is.na(salinity_value))
 
-# Plot the salinity fluctuations!!
+# Create the plot for salinity fluctuations!!
 sal_plot <- ggplot(kelp_salinity, aes(x = timepoint, y = salinity_value, 
-                          group = individual, color = treatment)) +  
+                                      group = individual, color = treatment)) +  
   geom_line(alpha = 1) +
   facet_wrap(~ experiment) +
   scale_color_manual(
@@ -1130,12 +1093,12 @@ sal_plot <- ggplot(kelp_salinity, aes(x = timepoint, y = salinity_value,
   labs(
     title = "Salinity fluctuations",
     x = "Time (hours)", y = "Salinity (psu)", color = "Treatment") +
-  theme_bw()
+  theme_bw() +
+  theme(strip.background = element_rect(fill = "lightgrey", color = "black"),
+        strip.text.x = element_text(face = "bold"))
 
+# Display the plot
 print(sal_plot)
-## We can clearly see that temperature does not have a big effect on the salinity increases
-### since there is clear overlap of the two temperatures (blue and red)
-### And it looks pretty much the same for all the experiments (except 4 ig :) )
 
 ## Saving the plots!!
 # Define output directory
@@ -1146,26 +1109,939 @@ w <- 10      # width in inches
 h <- 7      # height in inches
 res <- 500  # dpi
 
-# Save the plots
-ggsave(file.path(output_dir, "emmip_chla_5.png"), plot = emmip_chla_5, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "emmip_chlc_5.png"), plot = emmip_chlc_5, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "emmip_car_5.png"), plot = emmip_car_5, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "emmip_chla_7.png"), plot = emmip_chla_7, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "sgr_barplot.png"), plot = sgr_barplot, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "sgr_plot4.png"), plot = sgr_plot4, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "sgr_plot5.png"), plot = sgr_plot5, width = w, height = h, dpi = res)
+# Save the plots in the new order
+ggsave(file.path(output_dir, "mortality.png"), plot = mortality, width = w, height = h, dpi = res)
 ggsave(file.path(output_dir, "weight_plot.png"), plot = weight_plot, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "dw_ratio_barplot.png"), plot = dw_ratio_barplot, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "dw_plot4.png"), plot = dw_plot4, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "dw_plot5.png"), plot = dw_plot5, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "pigm_exp4.png"), plot = pigm_exp4, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "pigm_exp5.png"), plot = pigm_exp5, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "sgr_barplot.png"), plot = sgr_barplot, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "dw_barplot.png"), plot = dw_barplot, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "chla_barplot.png"), plot = chla_barplot, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "chlc_barplot.png"), plot = chlc_barplot, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "car_barplot1.png"), plot = car_barplot1, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "car_barplot2.png"), plot = car_barplot2, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "car_barplot3_1.png"), plot = car_barplot3_1, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "car_barplot3_2.png"), plot = car_barplot3_2, width = w, height = h, dpi = res)
 ggsave(file.path(output_dir, "sal_plot.png"), plot = sal_plot, width = w, height = h, dpi = res)
 
-## Since there are many plots under "pig_plots"
-# Loop through the list of plots and save each one
-for (i in 1:length(pig_plots)) {
-  ggsave(file.path(output_dir, paste0("pig_plots_exp", experiments[i], ".png")), 
-         plot = pig_plots[[i]], width = w, height = h, dpi = res)
+
+stop()---------------- :)
+
+
+## Rests - leave in case we need to look into experiments one by one
+
+# Run ANOVA with the combined treatment
+sgr_data_4$treatment <- with(sgr_data_4, interaction(salinity, temperature, locationnumber, sep = ":"))
+sgr_model_4_treat <- aov(SGR_total ~ treatment, data = sgr_data_4)
+
+# Tukey HSD with agricolae
+tukey_test <- HSD.test(sgr_model_4_treat, "treatment", group = TRUE)
+
+# Get group letters dataframe
+groups_df <- tukey_test$groups
+groups_df$treatment <- rownames(groups_df)
+groups_df <- groups_df[, c("treatment", "groups")]
+
+# Perform the SNK test for salinity * temperature * locationnumber
+snk_sgr4 <- SNK.test(sgr_model_4, c("salinity", "temperature", "locationnumber"))
+
+# Extract the SNK results for plotting
+snk_sgr4 <- snk_sgr4$groups
+
+# Calculate mean SGR_total and standard error for each treatment
+sgr_exp4 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 4") %>%
+  group_by(temperature, salinity, treatment, location, locationnumber, species) %>%
+  summarise(
+    mean_SGR = mean(SGR_total, na.rm = TRUE),
+    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),
+    location_label = location,
+    group_id = paste(salinity, temperature, locationnumber, sep = ":")  # Group ID to join SNK
+  )
+
+# Format SNK results for joining
+sgr_snk4 <- snk_sgr4 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id")
+
+# Merge SNK results into plot data
+sgr_exp4 <- left_join(sgr_exp4, sgr_snk4, by = "group_id")
+
+# Define positions for vertical lines (between salinities)
+sal_break4 <- c(2.5, 4.5)  # Adjust based on the number of salinity levels
+
+# Create the plot
+sgr_plot4 <- ggplot(sgr_exp4, aes(x = treatment, y = mean_SGR, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR), 
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = species_colours) +
+  # Add vertical lines between different salinities
+  geom_vline(xintercept = sal_break4, linetype = "dashed", color = "gray50") +
+  facet_grid(. ~ location_label) +
+  # Add the SNK letters above the bars
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) + 
+  labs(
+    title = "SGR - Experiment 4",
+    x = "Treatment",
+    y = expression("Mean SGR (% day"^-1*")"),
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines")  # Add spacing between temperature facets
+  )
+
+# Display the plot
+print(sgr_plot4)
+
+## Let's move onto experiment 5!
+# Experiment 5
+# Perform SNK tests for each species in Experiment 5
+# L. digitata
+# Perform SNK tests using existing ANOVA models
+snk_dig_5 <- SNK.test(sgr_dig_5, c("salinity", "temperature", "locationnumber"))
+snk_sac_5 <- SNK.test(sgr_sac_5, c("salinity", "temperature", "locationnumber"))
+
+# Extract and modify SNK groups
+snk_dig_df <- snk_dig_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "L. digitata")
+
+snk_sac_df <- snk_sac_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(
+    species = "S. latissima",
+    groups = chartr("abc", "def", groups)  # Shift letters to avoid overlap
+  )
+
+# Combine SNK groupings
+snk_combined_5 <- bind_rows(snk_dig_df, snk_sac_df)
+
+# Calculate mean SGR_total and standard error for each treatment
+sgr_exp5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5") %>%
+  group_by(temperature, salinity, treatment, location, locationnumber, species) %>%
+  summarise(
+    mean_SGR = mean(SGR_total, na.rm = TRUE),
+    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),
+    location_label = location,
+    group_id = paste(salinity, temperature, locationnumber, sep = ":")
+  )
+
+# Merge SNK results into plot data
+sgr_exp5 <- left_join(sgr_exp5, snk_combined_5, by = c("group_id", "species"))
+
+# Define position for vertical line between salinity levels
+sal_break <- c(2.5)
+
+# Create the plot
+sgr_plot5 <- ggplot(sgr_exp5, aes(x = treatment, y = mean_SGR, fill = location_label)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR),
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = location_colours) +
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  facet_grid(. ~ species) +
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) +
+  labs(
+    title = "SGR - Experiment 5",
+    x = "Treatment",
+    y = expression("Mean SGR (% day"^-1*")"),
+    fill = "Location"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines")
+  )
+
+# Display the plot
+print(sgr_plot5)
+
+# Experiment 6
+# Perform SNK test for Experiment 6
+snk_result_6 <- SNK.test(sgr_model_6, c("salinity", "temperature"))
+
+# Extract the SNK results for plotting
+snk_sgr6 <- snk_result_6$groups
+snk_sgr6
+
+# Prepare data for plotting
+sgr_exp6 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 6") %>%
+  group_by(temperature, salinity, treatment, species) %>%
+  summarise(
+    mean_SGR = mean(SGR_total, na.rm = TRUE),
+    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),  # Add "PSU" to salinity
+    group_id = paste(salinity, temperature, sep = ":")  # Group ID for SNK matching
+  )
+
+# Format SNK results for joining
+snk_df6 <- snk_sgr6 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id")
+
+# Merge SNK results into plot data
+sgr_exp6 <- left_join(sgr_exp6, snk_df6, by = "group_id")
+
+# Create the plot for Experiment 6
+sgr_plot6 <- ggplot(sgr_exp6, aes(x = treatment, y = mean_SGR, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR), 
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = species_colours) +
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  # Add SNK letters above the bars
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) + 
+  labs(
+    title = "SGR - Experiment 6",
+    x = "Treatment",
+    y = expression("Mean SGR (% day"^-1*")"),
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines")  # Add spacing between temperature facets
+  )
+
+# Display the plot
+print(sgr_plot6)
+
+# Experiment 7
+# Perform SNK test for Experiment 7
+snk_result_7 <- SNK.test(sgr_model_7, c("salinity", "temperature"))
+
+# Extract the SNK results for plotting
+snk_sgr7 <- snk_result_7$groups
+snk_sgr7
+
+# Prepare data for plotting
+sgr_exp7 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 7") %>%
+  group_by(temperature, salinity, treatment, species) %>%
+  summarise(
+    mean_SGR = mean(SGR_total, na.rm = TRUE),
+    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),  # Add "PSU" to salinity
+    group_id = paste(salinity, temperature, sep = ":")  # Group ID for SNK matching
+  )
+
+# Format SNK results for joining
+snk_df7 <- snk_sgr7 %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id")
+
+# Merge SNK results into plot data
+sgr_exp7 <- left_join(sgr_exp7, snk_df7, by = "group_id")
+
+# Create the plot for Experiment 7
+sgr_plot7 <- ggplot(sgr_exp7, aes(x = treatment, y = mean_SGR, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR), 
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = species_colours) +
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  # Add SNK letters above the bars
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) + 
+  labs(
+    title = "SGR - Experiment 7",
+    x = "Treatment",
+    y = expression("Mean SGR (% day"^-1*")"),
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines")  # Add spacing between temperature facets
+  )
+
+# Display the plot
+print(sgr_plot7)
+
+## Dry:wet weight ratio plots!!
+## Let's check at experiment 4 and 5 separately - with location included!
+
+# Experiment 4
+# Perform the SNK test for Experiment 4 (Dry-to-wet weight ratio)
+snk_dw_4 <- SNK.test(dw_model_4, c("salinity", "temperature", "locationnumber"))
+
+# Extract the SNK results for plotting
+snk_dw_4_groups <- snk_dw_4$groups
+
+# Calculate mean and standard error for each treatment
+dw_exp4 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 4") %>%
+  group_by(temperature, salinity, treatment, location, locationnumber, species) %>%
+  summarise(
+    mean_DW = mean(DW_ratio, na.rm = TRUE),
+    se_DW = sd(DW_ratio, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),
+    location_label = paste0(location),
+    group_id = paste(salinity, temperature, locationnumber, sep = ":")  # Group ID for joining SNK
+  )
+
+# Format SNK results for joining
+dw_snk4 <- snk_dw_4_groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id")
+
+# Merge SNK results into plot data
+dw_exp4 <- left_join(dw_exp4, dw_snk4, by = "group_id")
+
+# Create the plot with SNK letters
+dw_plot4 <- ggplot(dw_exp4, aes(x = treatment, y = mean_DW, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_DW - se_DW, ymax = mean_DW + se_DW), 
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = species_colours) +
+  geom_vline(xintercept = sal_break4, linetype = "dashed", color = "gray50") +
+  
+  facet_grid(. ~ location_label) +
+  # Add the SNK letters above the bars
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) + 
+  labs(
+    title = "Dry to Wet Weight Ratio - Experiment 4",
+    x = "Treatment",
+    y = "Mean D:W Ratio",
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1), 
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines")  # Add spacing between temperature facets
+  )
+
+# Display the plot
+print(dw_plot4)
+
+# Experiment 5
+# Perform SNK tests using existing ANOVA models
+snk_dw_dig_5 <- SNK.test(dw_dig_5, c("salinity", "temperature", "locationnumber"))
+snk_dw_sac_5 <- SNK.test(dw_sac_5, c("salinity", "temperature", "locationnumber"))
+
+# Extract and modify SNK groups
+snk_dw_dig_df <- snk_dw_dig_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "L. digitata")
+
+snk_dw_sac_df <- snk_dw_sac_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(
+    species = "S. latissima",
+    groups = chartr("abc", "def", groups)  # Shift letters to avoid overlap
+  )
+
+# Combine SNK groupings
+snk_dw_combined_5 <- bind_rows(snk_dw_dig_df, snk_dw_sac_df)
+
+# Calculate mean DW_ratio and standard error for each treatment
+dw_exp5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5") %>%
+  group_by(temperature, salinity, treatment, location, locationnumber, species) %>%
+  summarise(
+    mean_DW = mean(DW_ratio, na.rm = TRUE),
+    se_DW = sd(DW_ratio, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),
+    location_label = location,
+    group_id = paste(salinity, temperature, locationnumber, sep = ":")
+  )
+
+# Merge SNK results into plot data
+dw_exp5 <- left_join(dw_exp5, snk_dw_combined_5, by = c("group_id", "species"))
+
+# Create the plot
+dw_plot5 <- ggplot(dw_exp5, aes(x = treatment, y = mean_DW, fill = location_label)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_DW - se_DW, ymax = mean_DW + se_DW),
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = location_colours) +
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  facet_grid(. ~ species) +
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) +
+  labs(
+    title = "Dry to Wet Weight Ratio - Experiment 5",
+    x = "Treatment",
+    y = "Mean D:W Ratio",
+    fill = "Location"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines")
+  )
+
+# Display the plot
+print(dw_plot5)
+
+# Experiment 6
+# Perform SNK test using existing ANOVA model for Experiment 6
+snk_dw_6 <- SNK.test(dw_model_6, c("salinity", "temperature"))
+
+# Extract and modify SNK groups
+snk_dw_6_df <- snk_dw_6$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "L. hyperborea")  # Or adjust based on your species for this experiment
+
+# Calculate mean DW_ratio and standard error for each treatment
+dw_exp6 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 6") %>%
+  group_by(temperature, salinity, treatment, location, locationnumber, species) %>%
+  summarise(
+    mean_DW = mean(DW_ratio, na.rm = TRUE),
+    se_DW = sd(DW_ratio, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"), 
+    location_label = location,
+    group_id = paste(salinity, temperature, sep = ":")
+  )
+
+# Merge SNK results into plot data
+dw_exp6 <- left_join(dw_exp6, snk_dw_6_df, by = c("group_id", "species"))
+
+# Create the plot
+dw_plot6 <- ggplot(dw_exp6, aes(x = treatment, y = mean_DW, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_DW - se_DW, ymax = mean_DW + se_DW), 
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = species_colours) +
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  facet_grid(. ~ species) +
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) +
+  labs(
+    title = "Dry to Wet Weight Ratio - Experiment 6",
+    x = "Treatment",
+    y = "Mean D:W Ratio",
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines")
+  )
+
+# Display the plot
+print(dw_plot6)
+
+# Experiment 7
+# Perform SNK test using existing ANOVA model for Experiment 7
+snk_dw_7 <- SNK.test(dw_model_7, c("salinity", "temperature"))
+
+# Extract and modify SNK groups
+snk_dw_7_df <- snk_dw_7$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "L. hyperborea")  # Or adjust based on your species for this experiment
+
+# Calculate mean DW_ratio and standard error for each treatment
+dw_exp7 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 7") %>%
+  group_by(temperature, salinity, treatment, location, locationnumber, species) %>%
+  summarise(
+    mean_DW = mean(DW_ratio, na.rm = TRUE),
+    se_DW = sd(DW_ratio, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"), 
+    location_label = location,
+    group_id = paste(salinity, temperature, sep = ":")
+  )
+
+# Merge SNK results into plot data
+dw_exp7 <- left_join(dw_exp7, snk_dw_7_df, by = c("group_id", "species"))
+
+# Create the plot
+dw_plot7 <- ggplot(dw_exp7, aes(x = treatment, y = mean_DW, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_DW - se_DW, ymax = mean_DW + se_DW), 
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = species_colours) +
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  facet_grid(. ~ species) +
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) +
+  labs(
+    title = "Dry to Wet Weight Ratio - Experiment 7",
+    x = "Treatment",
+    y = "Mean D:W Ratio",
+    fill = "Species"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines")
+  )
+
+# Display the plot
+print(dw_plot7)
+
+
+## Cool!! Moving on to pigments now :)
+# Experiment 4
+# SNK for Chlorophyll a
+snk_chla4 <- SNK.test(chla_model_4, trt = c("salinity", "temperature", "locationnumber"))
+groups_chla4 <- snk_chla4$groups
+groups_chla4$treatment <- rownames(groups_chla4)
+groups_chla4$pigment <- "Chlorophyll_a_mg_g"
+
+# SNK for Chlorophyll c
+snk_chlc4 <- SNK.test(chlc_model_4, trt = c("salinity", "temperature", "locationnumber"))
+groups_chlc4 <- snk_chlc4$groups
+groups_chlc4$treatment <- rownames(groups_chlc4)
+groups_chlc4$pigment <- "Chlorophyll_c_mg_g"
+
+# SNK for Carotenoids
+snk_car4 <- SNK.test(car_model_4, trt = c("salinity", "temperature", "locationnumber"))
+groups_car4 <- snk_car4$groups
+groups_car4$treatment <- rownames(groups_car4)
+groups_car4$pigment <- "Total_carotenoid_mg_g"
+
+# Combine all SNK results into one dataframe
+groups_all4 <- bind_rows(groups_chla4, groups_chlc4, groups_car4)
+
+# Format SNK groups to match the treatment and locationnumber structure
+groups_all4 <- groups_all4 %>%
+  mutate(
+    raw_treatment = treatment,
+    treatment = paste0(gsub(":", "PSU & ", sub(":\\d+$", "", raw_treatment)), "°C"),
+    locationnumber = sub(".*:(\\d+)$", "\\1", raw_treatment),
+    locationnumber = as.character(locationnumber)
+  ) %>%
+  select(-raw_treatment)
+
+# Pivot the data to long format for pigment columns
+pigm_long4 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 4") %>%
+  pivot_longer(
+    cols = c("Chlorophyll_a_mg_g", "Chlorophyll_c_mg_g", "Total_carotenoid_mg_g"),
+    names_to = "pigment",
+    values_to = "pigment_concentration"
+  )
+
+# Calculate mean pigment concentration and standard error
+pigm_exp4 <- pigm_long4 %>%
+  group_by(temperature, salinity, treatment, location, locationnumber, species, pigment) %>%
+  summarise(
+    mean_pig = mean(pigment_concentration, na.rm = TRUE),
+    se_pig = sd(pigment_concentration, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),
+    location_label = location,
+    treatment_label = paste(salinity, "PSU &", temperature, "°C")
+  )
+
+# Manually join the SNK groupings with the pigment data
+pigm_exp4 <- pigm_exp4 %>%
+  left_join(groups_all4, by = c("treatment", "locationnumber", "pigment"))
+
+# Adjust SNK group letters to avoid overlap
+pigm_exp4 <- pigm_exp4 %>%
+  mutate(groups = case_when(
+    pigment == "Chlorophyll_a_mg_g" ~ "a",  # Chlorophyll a remains all "a"
+    pigment == "Chlorophyll_c_mg_g" ~ "b",  # Chlorophyll c is all "b"
+    pigment == "Total_carotenoid_mg_g" ~ case_when(
+      groups == "a" ~ "c",  # 'a' becomes 'c' for Total carotenoids
+      groups == "b" ~ "d",  # 'b' becomes 'd' for Total carotenoids
+      TRUE ~ groups  # leave other groups unchanged
+    )
+  ))
+
+# Create the plot
+pigment_labels <- c(
+  "Chlorophyll_a_mg_g" = "Chlorophyll a",
+  "Chlorophyll_c_mg_g" = "Chlorophyll c1 + c2",
+  "Total_carotenoid_mg_g" = "Total Carotenoids"
+)
+
+pigm_plot4 <- ggplot(pigm_exp4, aes(x = treatment_label, y = mean_pig, fill = location_label)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_pig - se_pig, ymax = mean_pig + se_pig),
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = location_colours) +
+  geom_vline(xintercept = sal_break4, linetype = "dashed", color = "gray50") +
+  geom_text(aes(label = groups, y = 0), 
+            position = position_dodge(0.7), vjust = -0.1, size = 4,
+            color = "black", show.legend = FALSE) +
+  facet_wrap(~ pigment, labeller = labeller(pigment = pigment_labels)) +
+  labs(
+    title = "Pigment Concentrations - Experiment 4",
+    x = "Treatment",
+    y = "Mean Concentration (mg/g)",
+    fill = "Location"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines"),
+    strip.text = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white", color = "black")
+  )
+
+# Display the plot
+print(pigm_plot4)
+
+## Alright so the SNK is a bit confusing here cause we have so many different SNK tests in Experiment 5
+## So we define a function here to help with applying different letters for different species and pigments
+# Define a function to apply new groupings
+apply_new_groups <- function(groups, species, pigment) {
+  # Mapping for L. digitata
+  if (species == "L. digitata") {
+    if (pigment == "Chlorophyll_a_mg_g") {
+      groups <- gsub("a", "a", groups)
+      groups <- gsub("b", "b", groups)
+      groups <- gsub("ab", "ab", groups)  # for cases where ab exists
+    } else if (pigment == "Chlorophyll_c_mg_g") {
+      groups <- gsub("a", "c", groups)
+    } else if (pigment == "Total_carotenoid_mg_g") {
+      groups <- gsub("a", "d", groups)
+      groups <- gsub("b", "e", groups)
+    }
+  }
+  
+  # Mapping for S. latissima
+  if (species == "S. latissima") {
+    if (pigment == "Chlorophyll_a_mg_g") {
+      groups <- gsub("a", "g", groups)
+      groups <- gsub("b", "h", groups)
+      groups <- gsub("c", "i", groups)
+      groups <- gsub("ab", "gh", groups)
+      groups <- gsub("abc", "ghi", groups)
+      groups <- gsub("bc", "ij", groups)
+    } else if (pigment == "Chlorophyll_c_mg_g") {
+      groups <- gsub("a", "j", groups)
+      groups <- gsub("b", "k", groups)
+    } else if (pigment == "Total_carotenoid_mg_g") {
+      groups <- gsub("a", "l", groups)
+    }
+  }
+  return(groups)
 }
 
+# Experiment 5
+# Perform SNK tests using existing ANOVA models
+snk_chla_dig_5 <- SNK.test(chla_dig_5, c("salinity", "temperature", "locationnumber"))
+snk_chlc_dig_5 <- SNK.test(chlc_dig_5, c("salinity", "temperature", "locationnumber"))
+snk_car_dig_5 <- SNK.test(car_dig_5, c("salinity", "temperature", "locationnumber"))
+
+snk_chla_sac_5 <- SNK.test(chla_sac_5, c("salinity", "temperature", "locationnumber"))
+snk_chlc_sac_5 <- SNK.test(chlc_sac_5, c("salinity", "temperature", "locationnumber"))
+snk_car_sac_5 <- SNK.test(car_sac_5, c("salinity", "temperature", "locationnumber"))
+
+# Extract and modify SNK groups for each species and pigment
+snk_chla_dig_df <- snk_chla_dig_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "L. digitata", pigment = "Chlorophyll_a_mg_g") %>%
+  mutate(groups_new = mapply(apply_new_groups, groups = .$groups, species = .$species, pigment = .$pigment))
+
+snk_chlc_dig_df <- snk_chlc_dig_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "L. digitata", pigment = "Chlorophyll_c_mg_g") %>%
+  mutate(groups_new = mapply(apply_new_groups, groups = .$groups, species = .$species, pigment = .$pigment))
+
+snk_car_dig_df <- snk_car_dig_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "L. digitata", pigment = "Total_carotenoid_mg_g") %>%
+  mutate(groups_new = mapply(apply_new_groups, groups = .$groups, species = .$species, pigment = .$pigment))
+
+snk_chla_sac_df <- snk_chla_sac_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "S. latissima", pigment = "Chlorophyll_a_mg_g") %>%
+  mutate(groups_new = mapply(apply_new_groups, groups = .$groups, species = .$species, pigment = .$pigment))
+
+snk_chlc_sac_df <- snk_chlc_sac_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "S. latissima", pigment = "Chlorophyll_c_mg_g") %>%
+  mutate(groups_new = mapply(apply_new_groups, groups = .$groups, species = .$species, pigment = .$pigment))
+
+snk_car_sac_df <- snk_car_sac_5$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(species = "S. latissima", pigment = "Total_carotenoid_mg_g") %>%
+  mutate(groups_new = mapply(apply_new_groups, groups = .$groups, species = .$species, pigment = .$pigment))
+
+# Combine SNK groupings for all pigments and species
+snk_all <- bind_rows(snk_chla_dig_df, snk_chlc_dig_df, snk_car_dig_df,
+                     snk_chla_sac_df, snk_chlc_sac_df, snk_car_sac_df)
+
+# Reshape data for Experiment 5 pigment concentrations
+pigm_long5 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5") %>%
+  pivot_longer(cols = c("Chlorophyll_a_mg_g", "Chlorophyll_c_mg_g", "Total_carotenoid_mg_g"),
+               names_to = "pigment", values_to = "pigment_concentration") %>%
+  group_by(temperature, salinity, treatment, location, locationnumber, species, pigment) %>%
+  summarise(
+    mean_pig = mean(pigment_concentration, na.rm = TRUE),
+    se_pig = sd(pigment_concentration, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C"),
+    location_label = location,
+    group_id = paste(salinity, temperature, locationnumber, sep = ":")
+  )
+
+# Define custom labels for pigment names
+pigment_labels <- c(
+  "Chlorophyll_a_mg_g" = "Chlorophyll a",
+  "Chlorophyll_c_mg_g" = "Chlorophyll c1 + c2",
+  "Total_carotenoid_mg_g" = "Total Carotenoids"
+)
+
+# Merge SNK results with the reshaped pigment data
+pigm_long5 <- left_join(pigm_long5, snk_all, by = c("group_id", "species", "pigment"))
+
+# Create the plot using ggh4x for facet background colors
+pigm_plot5 <- ggplot(pigm_long5, aes(x = treatment, y = mean_pig, fill = location_label)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_pig - se_pig, ymax = mean_pig + se_pig),
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = location_colours) +  # Location colors
+  
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  
+  # Correct custom labels for pigments
+  facet_wrap(~ species + pigment, labeller = labeller(pigment = pigment_labels), nrow = 2) +  # Keep the two-row layout
+  
+  # Apply custom colors using text labels
+  geom_text(aes(label = groups_new, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) +
+  labs(
+    title = "Pigment Concentrations - Experiment 5",
+    x = "Treatment",
+    y = "Mean Pigment Concentration",
+    fill = "Location"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines"),
+    
+    # Bold facet labels
+    strip.text = element_text(face = "bold"),
+    strip.text.y = element_text(face = "bold", color = "black"),
+    
+    # White background for all facet headers
+    strip.background = element_rect(
+      fill = "white",  # Set white background for facet headers
+      color = "black"
+    )
+  )
+
+# Display the plot
+print(pigm_plot5)
+
+# Experiment 6
+# Run SNK tests for each pigment using the ANOVA models
+snk_chla_6 <- SNK.test(chla_model_6, trt = c("salinity", "temperature"))
+snk_chlc_6 <- SNK.test(chlc_model_6, trt = c("salinity", "temperature"))
+snk_car_6  <- SNK.test(car_model_6, trt = c("salinity", "temperature"))
+
+# Extract SNK group letters and add pigment labels
+snk_chla_df_6 <- snk_chla_6$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(pigment = "Chlorophyll_a_mg_g")
+
+snk_chlc_df_6 <- snk_chlc_6$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(pigment = "Chlorophyll_c_mg_g")
+
+snk_car_df_6 <- snk_car_6$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(pigment = "Total_carotenoid_mg_g")
+
+# Combine SNK results for all pigments
+snk_all_6 <- bind_rows(snk_chla_df_6, snk_chlc_df_6, snk_car_df_6)
+
+# Manually remap SNK group letters by pigment (no overlaps)
+snk_all_6 <- snk_all_6 %>%
+  mutate(groups = case_when(
+    pigment == "Chlorophyll_c_mg_g" ~ gsub("a", "d", gsub("b", "e", groups)),
+    pigment == "Total_carotenoid_mg_g" ~ gsub("[a-z]", "f", groups),
+    TRUE ~ groups  # Keep original for Chlorophyll a
+  ))
+
+# Summarize pigment data for Experiment 6 and prepare for plotting
+pigm_long6 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 6") %>%
+  pivot_longer(cols = c("Chlorophyll_a_mg_g", "Chlorophyll_c_mg_g", "Total_carotenoid_mg_g"),
+               names_to = "pigment", values_to = "pigment_concentration") %>%
+  group_by(temperature, salinity, treatment, species, pigment) %>%
+  summarise(
+    mean_pig = mean(pigment_concentration, na.rm = TRUE),
+    se_pig = sd(pigment_concentration, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    group_id = paste(salinity, temperature, sep = ":"),
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C")
+  )
+
+# Merge SNK group letters into the summarized pigment data
+pigm_long6 <- left_join(pigm_long6, snk_all_6, by = c("group_id", "pigment"))
+
+# Define human-readable pigment labels
+pigment_labels <- c(
+  "Chlorophyll_a_mg_g" = "Chlorophyll a",
+  "Chlorophyll_c_mg_g" = "Chlorophyll c1 + c2",
+  "Total_carotenoid_mg_g" = "Total Carotenoids"
+)
+
+# Create pigment concentration plot for Experiment 6
+pigm_plot6 <- ggplot(pigm_long6, aes(x = treatment, y = mean_pig, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_pig - se_pig, ymax = mean_pig + se_pig),
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = species_colours) +
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) +
+  labs(
+    title = "Pigment Concentrations - Experiment 6",
+    x = "Treatment",
+    y = "Mean Pigment Concentration",
+    fill = "Species"
+  ) +
+  theme_bw() +
+  facet_wrap(~ pigment, labeller = labeller(pigment = pigment_labels)) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines"),
+    strip.text = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white", color = "black")
+  )
+
+# Display the plot
+print(pigm_plot6)
+
+# Experiment 7
+# Run SNK tests for each pigment using the ANOVA models
+snk_chla_7 <- SNK.test(chla_model_7, trt = c("salinity", "temperature"))
+snk_chlc_7 <- SNK.test(chlc_model_7, trt = c("salinity", "temperature"))
+snk_car_7  <- SNK.test(car_model_7, trt = c("salinity", "temperature"))
+
+# Extract SNK group letters and add pigment labels
+snk_chla_df_7 <- snk_chla_7$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(pigment = "Chlorophyll_a_mg_g")
+
+snk_chlc_df_7 <- snk_chlc_7$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(pigment = "Chlorophyll_c_mg_g")
+
+snk_car_df_7 <- snk_car_7$groups %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("group_id") %>%
+  mutate(pigment = "Total_carotenoid_mg_g")
+
+# Combine SNK results for all pigments
+snk_all_7 <- bind_rows(snk_chla_df_7, snk_chlc_df_7, snk_car_df_7)
+
+# Manually remap SNK group letters by pigment (adjustments as per your instructions)
+snk_all_7 <- snk_all_7 %>%
+  mutate(groups = case_when(
+    pigment == "Chlorophyll_c_mg_g" ~ gsub("a", "c", gsub("b", "d", groups)),
+    pigment == "Total_carotenoid_mg_g" ~ gsub("a", "e", gsub("b", "f", groups)),
+    TRUE ~ groups  # Keep original for Chlorophyll a
+  ))
+
+# Summarize pigment data for Experiment 7 and prepare for plotting
+pigm_long7 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 7") %>%
+  pivot_longer(cols = c("Chlorophyll_a_mg_g", "Chlorophyll_c_mg_g", "Total_carotenoid_mg_g"),
+               names_to = "pigment", values_to = "pigment_concentration") %>%
+  group_by(temperature, salinity, treatment, species, pigment) %>%
+  summarise(
+    mean_pig = mean(pigment_concentration, na.rm = TRUE),
+    se_pig = sd(pigment_concentration, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    group_id = paste(salinity, temperature, sep = ":"),
+    sal_temp = paste0(salinity, "PSU - ", temperature, "°C")
+  )
+
+# Merge SNK group letters into the summarized pigment data
+pigm_long7 <- left_join(pigm_long7, snk_all_7, by = c("group_id", "pigment"))
+
+# Define human-readable pigment labels
+pigment_labels <- c(
+  "Chlorophyll_a_mg_g" = "Chlorophyll a",
+  "Chlorophyll_c_mg_g" = "Chlorophyll c1 + c2",
+  "Total_carotenoid_mg_g" = "Total Carotenoids"
+)
+
+# Create pigment concentration plot for Experiment 7
+pigm_plot7 <- ggplot(pigm_long7, aes(x = treatment, y = mean_pig, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(), width = 0.7) +
+  geom_errorbar(aes(ymin = mean_pig - se_pig, ymax = mean_pig + se_pig),
+                width = 0.2, position = position_dodge(0.7)) +
+  scale_fill_manual(values = species_colours) +
+  geom_vline(xintercept = sal_break, linetype = "dashed", color = "gray50") +
+  geom_text(aes(label = groups, y = 0), position = position_dodge(0.7), vjust = -0.1, size = 4) +
+  labs(
+    title = "Pigment Concentrations - Experiment 7",
+    x = "Treatment",
+    y = "Mean Pigment Concentration",
+    fill = "Species"
+  ) +
+  theme_bw() +
+  facet_wrap(~ pigment, labeller = labeller(pigment = pigment_labels)) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "top",
+    panel.spacing.x = unit(2, "lines"),
+    strip.text = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white", color = "black")
+  )
+
+# Display the plot
+print(pigm_plot7)
