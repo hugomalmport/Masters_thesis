@@ -378,6 +378,12 @@ dw_snk_sac_5 <- aov(DW_ratio ~ sal_loc, data = dw_sac_5)
 dw_snk_sac_5 <- SNK.test(dw_snk_sac_5, "sal_loc")
 dw_snk_sac_5$groups
 
+# Tukey:
+
+table(dw_sac_5$sal_loc)
+tukey_test <- TukeyHSD(aov(DW_ratio ~ sal_loc, data = dw_sac_5))
+print(tukey_test)
+
 ## Alright so no difference between groups even though the interaction is significant, interesting
 
 # Experiment 6
@@ -657,39 +663,67 @@ weight_plot <- ggplot(weight_summary_mean, aes(x = days, y = mean_weight, color 
 # Display the plot
 print(weight_plot)
 
-## SGR plot!
-# Calculate mean SGR_total and standard error for each treatment
-sgr_summary <- kelp_data_combined %>%
-  group_by(temperature, salinity, treatment, species, experiment) %>%
+# SGR!
+# Duplicate Experiment 7 rows to separate temperature and salinity
+kelp_data_sgr7 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 7") %>%
+  mutate(
+    x_label = paste0(temperature, "°C")  # Temperature first for Experiment 7
+  ) %>%
+  bind_rows(
+    kelp_data_combined %>%
+      filter(experiment == "Experiment 7") %>%
+      mutate(
+        x_label = paste0(salinity, "PSU")  # Salinity second for Experiment 7
+      )
+  ) %>%
+  mutate(
+    experiment_label = "Experiment 7\n(16 days)"
+  )
+
+# Add total days and create a customized x-label for the rest (Experiment 4-6)
+kelp_data_sgr <- kelp_data_combined %>%
+  filter(experiment != "Experiment 7") %>%
+  mutate(
+    experiment_label = case_when(
+      experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
+      experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
+      experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
+      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)"
+    ),
+    x_label = paste0(salinity, "PSU & ", temperature, "°C")  # Keep the combination for Experiment 4-6
+  )
+
+# Combine modified Experiment 7 with the rest
+kelp_data_sgr <- bind_rows(kelp_data_sgr, kelp_data_sgr7)
+
+# Summarise
+sgr_summary <- kelp_data_sgr %>%
+  group_by(experiment_label, x_label, species) %>%
   summarise(
-    mean_SGR = mean(SGR_total, na.rm = TRUE),  # Calculate mean SGR_total
-    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),  # Standard error of the mean
+    mean_SGR = mean(SGR_total, na.rm = TRUE),
+    se_SGR = sd(SGR_total, na.rm = TRUE) / sqrt(n()),
     .groups = "drop"
   )
 
-# Add total days the experiments ran for and create experiment labels
-sgr_summary <- sgr_summary %>%
-  mutate(experiment_label = case_when(
-    experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
-    experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
-    experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
-    experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
-    experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
-  ))
+# Keep x_label order consistent and make sure temperature comes first in Experiment 7
+sgr_summary$x_label <- factor(sgr_summary$x_label, levels = c(
+  "10°C", "17°C", "10PSU", "20PSU",  # Fixed order for Experiment 7
+  unique(sgr_summary$x_label)[!(unique(sgr_summary$x_label) %in% c("10°C", "17°C", "10PSU", "20PSU"))]  # Keep the rest of the labels
+))
 
-
-# Create the plot with only SGR_total
-sgr_barplot <- ggplot(sgr_summary, aes(x = treatment, y = mean_SGR, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) +
-  scale_fill_manual(values = species_colours) +
+# Plot
+sgr_barplot <- ggplot(sgr_summary, aes(x = x_label, y = mean_SGR, fill = species)) +
+  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
   geom_errorbar(
     aes(ymin = mean_SGR - se_SGR, ymax = mean_SGR + se_SGR), 
     width = 0.2, 
     position = position_dodge(0.7)
   ) +
+  scale_fill_manual(values = species_colours) +
   facet_grid(. ~ experiment_label, scales = "free_x") +
   labs(
-    title = "Specific Growth rate",
+    title = "Specific Growth Rate",
     x = "Treatment",
     y = expression("SGR (% day"^-1*")"),
     fill = "Species"
@@ -702,26 +736,50 @@ sgr_barplot <- ggplot(sgr_summary, aes(x = treatment, y = mean_SGR, fill = speci
     strip.text.x = element_text(face = "bold")
   )
 
-# Display the plot
+# Show plot
 print(sgr_barplot)
 
-# DW-ratio!!
+# DW-ratio
+# Duplicate Experiment 6 rows to separate temperature and salinity
+kelp_data_dw6 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 6") %>%
+  mutate(
+    x_label = paste0(salinity, "PSU")
+  ) %>%
+  bind_rows(
+    kelp_data_combined %>%
+      filter(experiment == "Experiment 6") %>%
+      mutate(
+        x_label = paste0(temperature, "°C")
+      )
+  ) %>%
+  mutate(
+    experiment_label = "Experiment 6\n(16 days)"
+  )
+
 # Add total days and create a customized x-label
-dw_summary <- kelp_data_combined %>%
+kelp_data_dw <- kelp_data_combined %>%
+  filter(experiment != "Experiment 6") %>%
   mutate(
     experiment_label = case_when(
       experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
       experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
       experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
-      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
       experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
     ),
     x_label = case_when(
-      experiment == "Experiment 5" & species == "L. digitata" ~ paste0(temperature, "°C & ", location),
+      experiment == "Experiment 5" & species == "L. digitata" ~ paste0(temperature, "°C"),
       experiment == "Experiment 5" & species == "S. latissima" ~ paste0(salinity, "PSU & ", location),
+      experiment == "Experiment 7" ~ paste0(temperature, "°C"),
       TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
     )
-  ) %>%
+  )
+
+# Combine modified Experiment 6 with the rest
+kelp_data_dw <- bind_rows(kelp_data_dw, kelp_data_dw6)
+
+# Summarise
+dw_summary <- kelp_data_dw %>%
   group_by(experiment_label, x_label, species) %>%
   summarise(
     mean_DW_ratio = mean(DW_ratio, na.rm = TRUE),
@@ -729,10 +787,10 @@ dw_summary <- kelp_data_combined %>%
     .groups = "drop"
   )
 
-# Apply the custom label
-dw_summary$x_label <- factor(dw_summary$x_label, levels = factor_order)
+# Keep x_label order consistent
+dw_summary$x_label <- factor(dw_summary$x_label, levels = unique(dw_summary$x_label))
 
-# Create the plot
+# Plot
 dw_barplot <- ggplot(dw_summary, aes(x = x_label, y = mean_DW_ratio, fill = species)) +
   geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
   geom_errorbar(
@@ -756,28 +814,51 @@ dw_barplot <- ggplot(dw_summary, aes(x = x_label, y = mean_DW_ratio, fill = spec
     strip.text.x = element_text(face = "bold")
   )
 
-# Display the plot
+# Show plot
 print(dw_barplot)
 
 # Chlorophyll a time!
-# Same here, apply number of days and add custom label
-chla_summary <- kelp_data_combined %>%
+# Duplicate Experiment 6 rows to separate temperature and salinity
+kelp_data_chla6 <- kelp_data_combined %>%
+  filter(experiment == "Experiment 6") %>%
   mutate(
-    location = factor(location, levels = c("Ängklåvbukten", "Lökholmen", "Klövskär", "Klåvningarna")),
+    x_label = paste0(salinity, "PSU")
+  ) %>%
+  bind_rows(
+    kelp_data_combined %>%
+      filter(experiment == "Experiment 6") %>%
+      mutate(
+        x_label = paste0(temperature, "°C")
+      )
+  ) %>%
+  mutate(
+    experiment_label = "Experiment 6\n(16 days)"
+  )
+
+# Add total days and create a customized x-label
+kelp_data_chla <- kelp_data_combined %>%
+  filter(experiment != "Experiment 6") %>%
+  mutate(
     experiment_label = case_when(
       experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
       experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
       experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
-      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
       experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
     ),
     x_label = case_when(
+      experiment == "Experiment 4" ~ paste0(temperature, "°C"),
       experiment == "Experiment 5" & species == "L. digitata" ~ paste0(salinity, "PSU & ", temperature, "°C"),
       experiment == "Experiment 5" & species == "S. latissima" ~ paste0(temperature, "°C & ", location),
+      experiment == "Experiment 7" ~ paste0(salinity, "PSU"),
       TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
-    ),
-    x_label = factor(x_label, levels = unique(x_label))  # Convert x_label to a factor with explicit order
-  ) %>%
+    )
+  )
+
+# Combine modified Experiment 6 with the rest
+kelp_data_chla <- bind_rows(kelp_data_chla, kelp_data_chla6)
+
+# Summarise
+chla_summary <- kelp_data_chla %>%
   group_by(experiment_label, x_label, species) %>%
   summarise(
     mean_chla = mean(`Chlorophyll_a_mg_g`, na.rm = TRUE),
@@ -785,10 +866,10 @@ chla_summary <- kelp_data_combined %>%
     .groups = "drop"
   )
 
-# Apply the custom label
-chla_summary$x_label <- factor(chla_summary$x_label, levels = factor_order)
+# Keep x_label order consistent
+chla_summary$x_label <- factor(chla_summary$x_label, levels = unique(chla_summary$x_label))
 
-# Create the plot
+# Plot
 chla_barplot <- ggplot(chla_summary, aes(x = x_label, y = mean_chla, fill = species)) +
   geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
   geom_errorbar(
@@ -816,27 +897,63 @@ chla_barplot <- ggplot(chla_summary, aes(x = x_label, y = mean_chla, fill = spec
 print(chla_barplot)
 
 # Chlorophyll c time!
-# Calculate mean Chlorophyll c and standard error
-chlc_summary <- kelp_data_combined %>%
-  group_by(treatment, species, experiment) %>%
+# Duplicate Experiment 5 S. latissima rows to separate temperature and salinity
+kelp_data_chlc5sac <- kelp_data_combined %>%
+  filter(experiment == "Experiment 5", species == "S. latissima") %>%
+  mutate(
+    x_label = paste0(salinity, "PSU")
+  ) %>%
+  bind_rows(
+    kelp_data_combined %>%
+      filter(experiment == "Experiment 5", species == "S. latissima") %>%
+      mutate(
+        x_label = paste0(temperature, "°C")
+      )
+  ) %>%
+  mutate(
+    experiment_label = "Experiment 5\n(14 days)\u00A0"
+  )
+
+# Add total days and create a customized x-label
+kelp_data_chlc <- kelp_data_combined %>%
+  filter(!(experiment == "Experiment 5" & species == "S. latissima")) %>%
+  mutate(
+    experiment_label = case_when(
+      experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
+      experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
+      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
+      experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
+    ),
+    x_label = case_when(
+      experiment == "Experiment 4" ~ paste0(salinity, "PSU & ", temperature, "°C"),
+      experiment == "Experiment 5" & species == "L. digitata" ~ paste0(salinity, "PSU & ", temperature, "°C"),
+      experiment == "Experiment 6" ~ paste0(salinity, "PSU"),
+      experiment == "Experiment 7" ~ paste0(salinity, "PSU"),
+      TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
+    )
+  )
+
+# Combine modified Experiment 6 with the rest
+kelp_data_chlc <- bind_rows(kelp_data_chlc, kelp_data_chlc5sac)
+
+# Summarise
+chlc_summary <- kelp_data_chlc %>%
+  group_by(experiment_label, x_label, species) %>%
   summarise(
-    mean_chlc = mean(`Chlorophyll_c_mg_g`, na.rm = TRUE),  
-    se_chlc = sd(`Chlorophyll_c_mg_g`, na.rm = TRUE) / sqrt(n()),  
+    mean_chlc = mean(`Chlorophyll_c_mg_g`, na.rm = TRUE),
+    se_chlc = sd(`Chlorophyll_c_mg_g`, na.rm = TRUE) / sqrt(n()),
     .groups = "drop"
   )
 
-# Add number of days, no need for the custom label here
-chlc_summary <- chlc_summary %>%
-  mutate(experiment_label = case_when(
-    experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
-    experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
-    experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
-    experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
-    experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
-  ))
+# Keep x_label order consistent and manually
+chlc_summary$x_label <- factor(chlc_summary$x_label, 
+                               levels = c(
+                                 "10PSU & 10°C", "10PSU & 20°C", "20PSU & 10°C", "20PSU & 20°C", "30PSU & 10°C", "30PSU & 20°C",  # For L. digitata
+                                 "10°C", "20°C", "10PSU", "20PSU"  # For S. latissima
+                               ))
 
-# Create the plot
-chlc_barplot <- ggplot(chlc_summary, aes(x = treatment, y = mean_chlc, fill = species)) +
+# Plot
+chlc_barplot <- ggplot(chlc_summary, aes(x = x_label, y = mean_chlc, fill = species)) +
   geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
   geom_errorbar(
     aes(ymin = mean_chlc - se_chlc, ymax = mean_chlc + se_chlc), 
@@ -846,7 +963,7 @@ chlc_barplot <- ggplot(chlc_summary, aes(x = treatment, y = mean_chlc, fill = sp
   scale_fill_manual(values = species_colours) +
   facet_grid(. ~ experiment_label, scales = "free_x") +
   labs(
-    title = "Chlorophyll c1 + c2",
+    title = "Chlorophyll c",
     x = "Treatment",
     y = "Mean Chlorophyll c (mg/g)",
     fill = "Species"
@@ -863,62 +980,6 @@ chlc_barplot <- ggplot(chlc_summary, aes(x = treatment, y = mean_chlc, fill = sp
 print(chlc_barplot)
 
 # Carotenoids!
-# First alternative:
-# Add number of days and custom label :)
-car_summary <- kelp_data_combined %>%
-  mutate(
-    location = factor(location, levels = c("Ängklåvbukten", "Lökholmen", "Klövskär", "Klåvningarna")),
-    experiment_label = case_when(
-      experiment == "Experiment 4" ~ "Experiment 4\n(12 days)",
-      experiment == "Experiment 5" & species == "L. digitata" ~ "Experiment 5\n(14 days)",
-      experiment == "Experiment 5" & species == "S. latissima" ~ "Experiment 5\n(14 days)\u00A0",
-      experiment == "Experiment 6" ~ "Experiment 6\n(16 days)",
-      experiment == "Experiment 7" ~ "Experiment 7\n(16 days)"
-    ),
-    x_label = case_when(
-      experiment == "Experiment 5" & species == "L. digitata" ~ paste0(salinity, "PSU & ", temperature, "°C"),
-      experiment == "Experiment 5" & species == "S. latissima" ~ paste0(temperature, "°C & ", location),
-      TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
-    )
-  ) %>%
-  group_by(experiment_label, x_label, species) %>%
-  summarise(
-    mean_car = mean(`Total_carotenoid_mg_g`, na.rm = TRUE),
-    se_car = sd(`Total_carotenoid_mg_g`, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop"
-  )
-
-# Apply the custom label!
-car_summary$x_label <- factor(car_summary$x_label, levels = factor_order)
-
-# Create the plot
-car_barplot1 <- ggplot(car_summary, aes(x = x_label, y = mean_car, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
-  geom_errorbar(
-    aes(ymin = mean_car - se_car, ymax = mean_car + se_car), 
-    width = 0.2, 
-    position = position_dodge(0.7)
-  ) +
-  scale_fill_manual(values = species_colours) +
-  facet_grid(. ~ experiment_label, scales = "free_x") +
-  labs(
-    title = "Total Carotenoids",
-    x = "Treatment",
-    y = "Mean carotenoid content (mg/g)",
-    fill = "Species"
-  ) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "top",
-    strip.background = element_rect(fill = "lightgrey", color = "black"),
-    strip.text.x = element_text(face = "bold")
-  )
-
-# Display the plot
-print(car_barplot1)
-
-# Second alternative:
 # Add number of days and custom label
 car_summary <- kelp_data_combined %>%
   mutate(
@@ -933,6 +994,7 @@ car_summary <- kelp_data_combined %>%
     x_label = case_when(
       experiment == "Experiment 5" & species == "S. latissima" ~ paste0(temperature, "°C & ", location),
       experiment == "Experiment 4" ~ paste0(salinity, "PSU & ", temperature, "°C"),
+      experiment == "Experiment 7" ~ paste0(salinity, "PSU"),  # Only salinity for Experiment 7
       TRUE ~ paste0(salinity, "PSU & ", temperature, "°C")
     )
   ) %>%
@@ -947,11 +1009,16 @@ car_summary <- kelp_data_combined %>%
     .groups = "drop"
   )
 
-# Apply the x-axis order
-car_summary$x_label <- factor(car_summary$x_label, levels = factor_order)
+# Explicitly define factor levels for x_label to ensure correct ordering
+car_summary$x_label <- factor(car_summary$x_label, levels = c(
+  "10PSU & 10°C", "10PSU & 20°C", "20PSU & 10°C", "20PSU & 20°C", "30PSU & 10°C", "30PSU & 20°C",  # For L. digitata
+  "10°C & Ängklåvbukten", "10°C & Lökholmen", "10°C & Klövskär", "10°C & Klåvningarna",  # For S. latissima
+  "20°C & Ängklåvbukten", "20°C & Lökholmen", "20°C & Klövskär", "20°C & Klåvningarna",  # For S. latissima
+  "10PSU", "20PSU", "30PSU"  # For Experiment 7 (only salinity)
+))
 
 # Create the barplot
-car_barplot2 <- ggplot(car_summary, aes(x = x_label, y = mean_car, fill = species)) +
+car_barplot <- ggplot(car_summary, aes(x = x_label, y = mean_car, fill = species)) +
   geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) + 
   geom_errorbar(
     aes(ymin = mean_car - se_car, ymax = mean_car + se_car), 
@@ -977,86 +1044,12 @@ car_barplot2 <- ggplot(car_summary, aes(x = x_label, y = mean_car, fill = specie
     axis.text.x = element_text(angle = 45, hjust = 1),
     legend.position = "top",
     strip.background = element_rect(fill = "lightgrey", color = "black"),
-    strip.text.x = element_text(face = "bold")
+    strip.text.x = element_text(face = "bold"),
+    panel.spacing = unit(ifelse("Experiment 4" %in% car_summary$experiment_label, 0.2, 0.5), "lines")
   )
 
 # Display the plot
-print(car_barplot2)
-
-
-# Third alternative:
-# Here we'll create two separate plots, one for Experiment 4 and then one for the rest
-# Find the common y-axis limit for all experiments, so that we have the same for both plots
-y_max <- max(car_summary$mean_car + car_summary$se_car, na.rm = TRUE)
-
-# Plot for Experiment 4
-car_summary_exp4 <- car_summary %>%
-  filter(experiment_label == "Experiment 4\n(12 days)")
-
-# Apply the custom x-labels
-car_summary_exp4$x_label <- factor(car_summary_exp4$x_label, levels = factor_order)
-
-# Create the plot for Experiment 4
-car_barplot3_1 <- ggplot(car_summary_exp4, aes(x = x_label, y = mean_car, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) +
-  geom_errorbar(
-    aes(ymin = mean_car - se_car, ymax = mean_car + se_car),
-    width = 0.2,
-    position = position_dodge(0.7)
-  ) +
-  scale_fill_manual(values = species_colours) +
-  facet_nested(. ~ location_label, scales = "free_x", nest_line = TRUE) +
-  coord_cartesian(ylim = c(0, y_max)) +
-  labs(
-    title = "Experiment 4: Total Carotenoids",
-    x = "Treatment",
-    y = "Mean carotenoid content (mg/g)",
-    fill = "Species"
-  ) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "top",
-    strip.background = element_rect(fill = "lightgrey", color = "black"),
-    strip.text.x = element_text(face = "bold")
-  )
-
-# Plot for Experiments 5 – 7
-car_summary_exp5to7 <- car_summary %>%
-  filter(experiment_label != "Experiment 4\n(12 days)")
-
-# Apply the custom x-labels
-car_summary_exp5to7$x_label <- factor(car_summary_exp5to7$x_label, levels = factor_order)
-
-# Create the plot
-car_barplot3_2 <- ggplot(car_summary_exp5to7, aes(x = x_label, y = mean_car, fill = species)) +
-  geom_bar(stat = "identity", position = position_dodge(0.7), width = 0.7) +
-  geom_errorbar(
-    aes(ymin = mean_car - se_car, ymax = mean_car + se_car),
-    width = 0.2,
-    position = position_dodge(0.7)
-  ) +
-  scale_fill_manual(values = species_colours) +
-  facet_grid(. ~ experiment_label, scales = "free_x") +
-  coord_cartesian(ylim = c(0, y_max)) +
-  labs(
-    title = "Experiments 5 – 7: Total Carotenoids",
-    x = "Treatment",
-    y = "Mean carotenoid content (mg/g)",
-    fill = "Species"
-  ) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "top",
-    strip.background = element_rect(fill = "lightgrey", color = "black"),
-    strip.text.x = element_text(face = "bold")
-  )
-
-# Display plots separately
-print(car_barplot3_1)
-print(car_barplot3_2)
-
+print(car_barplot)
 
 # Salinity fluctuations
 # Identify all salinity measurement columns
@@ -1116,14 +1109,13 @@ ggsave(file.path(output_dir, "sgr_barplot.png"), plot = sgr_barplot, width = w, 
 ggsave(file.path(output_dir, "dw_barplot.png"), plot = dw_barplot, width = w, height = h, dpi = res)
 ggsave(file.path(output_dir, "chla_barplot.png"), plot = chla_barplot, width = w, height = h, dpi = res)
 ggsave(file.path(output_dir, "chlc_barplot.png"), plot = chlc_barplot, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "car_barplot1.png"), plot = car_barplot1, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "car_barplot2.png"), plot = car_barplot2, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "car_barplot3_1.png"), plot = car_barplot3_1, width = w, height = h, dpi = res)
-ggsave(file.path(output_dir, "car_barplot3_2.png"), plot = car_barplot3_2, width = w, height = h, dpi = res)
+ggsave(file.path(output_dir, "car_barplot.png"), plot = car_barplot, width = w, height = h, dpi = res)
 ggsave(file.path(output_dir, "sal_plot.png"), plot = sal_plot, width = w, height = h, dpi = res)
 
 
 stop()---------------- :)
+
+
 
 
 ## Rests - leave in case we need to look into experiments one by one
